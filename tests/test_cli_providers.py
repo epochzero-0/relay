@@ -1,6 +1,6 @@
 """Tests for real-provider wiring in the CLI (registry + dotenv + `run`).
 
-Driven entirely through `polybatch.cli.main` with patched sys.argv -- never a
+Driven entirely through `relay.cli.main` with patched sys.argv -- never a
 subprocess. These must pass regardless of which optional SDKs are actually
 installed in the test environment (anthropic and google are genuinely
 absent here; openai happens to be present), so the SDK-availability check is
@@ -15,11 +15,11 @@ from pathlib import Path
 
 import pytest
 
-from polybatch.cli import main
+from relay.cli import main
 
 
 def _run_cli(monkeypatch, argv: list[str]) -> int:
-    monkeypatch.setattr(sys, "argv", ["polybatch"] + argv)
+    monkeypatch.setattr(sys, "argv", ["relay"] + argv)
     return main()
 
 
@@ -63,7 +63,7 @@ def test_anthropic_sdk_absent_message_mentions_extra(monkeypatch, input_csv, tmp
     )
     out = capsys.readouterr().out
     assert exit_code == 2
-    assert "polybatch[anthropic]" in out
+    assert "relay[anthropic]" in out
 
 
 def test_sdk_absent_path_is_deterministic_via_find_spec_patch(monkeypatch, input_csv, tmp_path, capsys):
@@ -83,7 +83,7 @@ def test_sdk_absent_path_is_deterministic_via_find_spec_patch(monkeypatch, input
     )
     out = capsys.readouterr().out
     assert exit_code == 2
-    assert "polybatch[openai]" in out
+    assert "relay[openai]" in out
 
 
 def test_openai_missing_api_key_exits_2_naming_env_var(monkeypatch, input_csv, tmp_path, capsys):

@@ -3,7 +3,7 @@ requires = ["setuptools>=68.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "polybatch"
+name = "relay"
 version = "1.0.0"
 description = "Fault-tolerant, resumable multi-provider batch-inference orchestrator"
 requires-python = ">=3.10"
@@ -22,7 +22,7 @@ all = [
 ]
 
 [project.scripts]
-polybatch = "polybatch.cli:main"
+relay = "relay.cli:main"
 
 [tool.setuptools.packages.find]
-include = ["polybatch*"]
+include = ["relay*"]

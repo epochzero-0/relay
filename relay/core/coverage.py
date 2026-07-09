@@ -10,7 +10,7 @@ This is a port of the legacy fix script's find_missing (set difference of
 expected ids against the ids present in run{N}.csv), generalized to any CSV
 with an "order_id" column and kept order-preserving so re-sends stay stable.
 
-Stdlib only; imports nothing from polybatch.
+Stdlib only; imports nothing from relay.
 """
 
 from __future__ import annotations

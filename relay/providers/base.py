@@ -1,6 +1,6 @@
 """Provider protocol: the contract every backend (mock, Claude, GPT, ...) implements.
 
-A Provider is a thin adapter over one vendor's batch API. polybatch's
+A Provider is a thin adapter over one vendor's batch API. relay's
 orchestrator drives every provider through the same lifecycle so that
 fault-tolerance logic (chunking, polling, coverage re-send) lives in one place.
 
@@ -24,7 +24,7 @@ from __future__ import annotations
 
 from typing import Iterator, Protocol, runtime_checkable
 
-from polybatch.core.models import BatchResult, JobStatus, ProviderLimits, Request
+from relay.core.models import BatchResult, JobStatus, ProviderLimits, Request
 
 
 # ----- error taxonomy --------------------------------------------------------

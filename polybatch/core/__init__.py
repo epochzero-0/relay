@@ -1,1 +1,0 @@
-"""polybatch core package."""

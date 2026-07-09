@@ -13,9 +13,9 @@ import types
 
 import pytest
 
-from polybatch.core.models import ProviderLimits, Request
-from polybatch.providers.base import BatchTooLargeError, TransientSubmitError
-from polybatch.providers.anthropic import AnthropicBatchProvider
+from relay.core.models import ProviderLimits, Request
+from relay.providers.base import BatchTooLargeError, TransientSubmitError
+from relay.providers.anthropic import AnthropicBatchProvider
 
 
 class _FakeErr(Exception):

@@ -14,9 +14,9 @@ import types
 
 import pytest
 
-from polybatch.core.models import ProviderLimits, Request
-from polybatch.providers.base import BatchTooLargeError, TransientSubmitError
-from polybatch.providers.openai import OpenAIBatchProvider
+from relay.core.models import ProviderLimits, Request
+from relay.providers.base import BatchTooLargeError, TransientSubmitError
+from relay.providers.openai import OpenAIBatchProvider
 
 
 # ----- fake openai SDK -------------------------------------------------------

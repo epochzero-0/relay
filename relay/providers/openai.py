@@ -1,6 +1,6 @@
-"""OpenAI Batch API adapter (optional extra: ``pip install polybatch[openai]``).
+"""OpenAI Batch API adapter (optional extra: ``pip install relay[openai]``).
 
-Implements the :class:`~polybatch.providers.base.Provider` protocol against
+Implements the :class:`~relay.providers.base.Provider` protocol against
 OpenAI's asynchronous Batch API (``/v1/batches`` with a JSONL input file):
 
   submit()         build a JSONL of chat-completion requests, upload it with
@@ -25,14 +25,14 @@ from __future__ import annotations
 import json
 from typing import Iterator
 
-from polybatch.core.models import BatchResult, JobStatus, ProviderLimits, Request
-from polybatch.providers.base import BatchTooLargeError, TransientSubmitError
+from relay.core.models import BatchResult, JobStatus, ProviderLimits, Request
+from relay.providers.base import BatchTooLargeError, TransientSubmitError
 
 #: Default model. EDIT THIS to whatever chat model you want to batch against.
 DEFAULT_MODEL = "gpt-4o-mini"
 
 #: OpenAI's hard ceiling is 50,000 requests per batch input file. The binding
-#: constraint in practice is the per-tier enqueued-token limit, which polybatch
+#: constraint in practice is the per-tier enqueued-token limit, which relay
 #: cannot see; if you hit token rejections, lower this so chunks stay small.
 DEFAULT_MAX_ITEMS = 50_000
 
@@ -85,7 +85,7 @@ class OpenAIBatchProvider:
         except ImportError as exc:  # pragma: no cover - trivial guard.
             raise ImportError(
                 "the 'openai' package is required for --provider openai; "
-                "install it with: pip install polybatch[openai]"
+                "install it with: pip install relay[openai]"
             ) from exc
         return openai
 
@@ -96,7 +96,7 @@ class OpenAIBatchProvider:
         return self._client_obj
 
     def _map_submit_error(self, exc: Exception) -> Exception:
-        """Translate an SDK exception into polybatch's submit taxonomy.
+        """Translate an SDK exception into relay's submit taxonomy.
 
         Rate limits / connection / timeout / 5xx -> TransientSubmitError so the
         orchestrator retries with backoff. A 400 that reads like a size/token
@@ -133,7 +133,7 @@ class OpenAIBatchProvider:
         payload = self._build_jsonl(requests).encode("utf-8")
         try:
             uploaded = client.files.create(
-                file=("polybatch_batch.jsonl", payload),
+                file=("relay_batch.jsonl", payload),
                 purpose="batch",
             )
             batch = client.batches.create(
@@ -157,7 +157,7 @@ class OpenAIBatchProvider:
         completed = getattr(counts, "completed", 0) or 0
         failed = getattr(counts, "failed", 0) or 0
 
-        # Map OpenAI's status vocabulary onto polybatch's terminal states.
+        # Map OpenAI's status vocabulary onto relay's terminal states.
         # completed -> "ended"; failed/expired/cancelled map straight through;
         # everything else (validating/in_progress/finalizing/cancelling) is a
         # non-terminal state name (deliberately NOT in JobStatus.TERMINAL_STATES).

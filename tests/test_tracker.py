@@ -1,4 +1,4 @@
-"""Tests for polybatch.core.tracker: state transitions, decide(), persistence."""
+"""Tests for relay.core.tracker: state transitions, decide(), persistence."""
 
 from __future__ import annotations
 
@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from polybatch.core import tracker as trk
-from polybatch.core.tracker import Tracker
+from relay.core import tracker as trk
+from relay.core.tracker import Tracker
 
 
 def _load_raw(path: Path) -> dict:

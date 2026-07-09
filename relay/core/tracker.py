@@ -15,7 +15,7 @@ State lifecycle for a chunk key:
 decide() collapses that state into the next action the orchestrator should
 take: skip, resume, or submit.
 
-This module is intentionally dependency-free (stdlib only, no other polybatch
+This module is intentionally dependency-free (stdlib only, no other relay
 imports) so it can be reused and tested in isolation.
 """
 

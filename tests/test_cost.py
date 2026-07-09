@@ -1,4 +1,4 @@
-"""Tests for the offline cost estimation utility and `polybatch cost` CLI.
+"""Tests for the offline cost estimation utility and `relay cost` CLI.
 
 Everything here is fully offline and instant: no network, no API keys, only
 tmp_path CSV files and in-memory math. ASCII-only per project convention.
@@ -11,8 +11,8 @@ from pathlib import Path
 
 import pytest
 
-from polybatch.cli import main
-from polybatch.cost import (
+from relay.cli import main
+from relay.cost import (
     PRICES,
     CostEstimate,
     estimate_cost,
@@ -76,7 +76,7 @@ def test_estimate_cost_unknown_model_lists_available_models():
 
 
 def test_estimate_cost_for_records_uses_default_task():
-    from polybatch.core.models import Record
+    from relay.core.models import Record
 
     records = [
         Record(order_id="rec_0001", text="hello"),
@@ -108,7 +108,7 @@ def test_format_estimate_is_ascii_and_has_model_and_total():
 
 
 def _run_cli(monkeypatch, argv: list[str]) -> int:
-    monkeypatch.setattr(sys, "argv", ["polybatch"] + argv)
+    monkeypatch.setattr(sys, "argv", ["relay"] + argv)
     return main()
 
 

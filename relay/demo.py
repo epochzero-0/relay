@@ -22,9 +22,9 @@ import tempfile
 from pathlib import Path
 from typing import Callable
 
-from polybatch.core.models import DEFAULT_TASK, Job, Record
-from polybatch.core.orchestrator import Orchestrator
-from polybatch.providers.mock import MockProvider
+from relay.core.models import DEFAULT_TASK, Job, Record
+from relay.core.orchestrator import Orchestrator
+from relay.providers.mock import MockProvider
 
 #: Golden chaos scenario knobs (pinned; see tests/test_convergence.py).
 CHAOS_KWARGS = dict(error_rate=0.1, drop_rate=0.1, submit_failure_rate=0.3)
@@ -70,13 +70,13 @@ def run_demo(
     """
     explicit_output_dir = output_dir is not None
     if output_dir is None:
-        out_dir = Path(tempfile.mkdtemp(prefix="polybatch_demo_"))
+        out_dir = Path(tempfile.mkdtemp(prefix="relay_demo_"))
     else:
         out_dir = Path(output_dir)
         out_dir.mkdir(parents=True, exist_ok=True)
 
     log("=" * 60)
-    log("polybatch demo -- fault-tolerance narrative")
+    log("relay demo -- fault-tolerance narrative")
     log("=" * 60)
     log(f"seed={seed}  records={RECORD_COUNT}  output_dir={out_dir}")
     log("")

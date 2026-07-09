@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from typing import Callable
 
-from polybatch.core.models import ProviderLimits, Request
+from relay.core.models import ProviderLimits, Request
 
 
 def _default_estimate_tokens(request: Request) -> int:

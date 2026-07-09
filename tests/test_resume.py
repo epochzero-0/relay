@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import csv
 
-from polybatch.core.models import ProviderLimits
-from polybatch.core.tracker import Tracker, DONE
+from relay.core.models import ProviderLimits
+from relay.core.tracker import Tracker, DONE
 
 from .conftest import make_records
 

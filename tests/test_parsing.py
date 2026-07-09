@@ -1,11 +1,11 @@
-"""Tests for polybatch.core.parsing: parse_result_line, extract_order_id,
+"""Tests for relay.core.parsing: parse_result_line, extract_order_id,
 ParseFailure, and parse_batch_results.
 """
 
 from __future__ import annotations
 
-from polybatch.core.models import BatchResult
-from polybatch.core.parsing import (
+from relay.core.models import BatchResult
+from relay.core.parsing import (
     ParseFailure,
     extract_order_id,
     parse_batch_results,

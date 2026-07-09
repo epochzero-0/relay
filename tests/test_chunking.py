@@ -1,9 +1,9 @@
-"""Tests for polybatch.core.chunking: split_requests and merge_rows."""
+"""Tests for relay.core.chunking: split_requests and merge_rows."""
 
 from __future__ import annotations
 
-from polybatch.core.chunking import merge_rows, split_requests
-from polybatch.core.models import ProviderLimits, Request
+from relay.core.chunking import merge_rows, split_requests
+from relay.core.models import ProviderLimits, Request
 
 
 def _requests(n: int, max_tokens: int = 64) -> list[Request]:

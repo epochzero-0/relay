@@ -1,6 +1,6 @@
-"""Anthropic Message Batches adapter (extra: ``pip install polybatch[anthropic]``).
+"""Anthropic Message Batches adapter (extra: ``pip install relay[anthropic]``).
 
-Implements the :class:`~polybatch.providers.base.Provider` protocol against
+Implements the :class:`~relay.providers.base.Provider` protocol against
 Anthropic's Message Batches API:
 
   submit()         ``messages.batches.create(requests=[...])`` where each item
@@ -23,8 +23,8 @@ from __future__ import annotations
 
 from typing import Iterator
 
-from polybatch.core.models import BatchResult, JobStatus, ProviderLimits, Request
-from polybatch.providers.base import BatchTooLargeError, TransientSubmitError
+from relay.core.models import BatchResult, JobStatus, ProviderLimits, Request
+from relay.providers.base import BatchTooLargeError, TransientSubmitError
 
 #: Default model. EDIT THIS to whatever Claude model you want to batch against.
 DEFAULT_MODEL = "claude-3-5-haiku-latest"
@@ -75,7 +75,7 @@ class AnthropicBatchProvider:
         except ImportError as exc:  # pragma: no cover - trivial guard.
             raise ImportError(
                 "the 'anthropic' package is required for --provider anthropic; "
-                "install it with: pip install polybatch[anthropic]"
+                "install it with: pip install relay[anthropic]"
             ) from exc
         return anthropic
 
@@ -86,7 +86,7 @@ class AnthropicBatchProvider:
         return self._client_obj
 
     def _map_submit_error(self, exc: Exception) -> Exception:
-        """Translate an SDK exception into polybatch's submit taxonomy."""
+        """Translate an SDK exception into relay's submit taxonomy."""
         anthropic = self._sdk()
         transient = (
             getattr(anthropic, "RateLimitError", ()),

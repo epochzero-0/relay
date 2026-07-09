@@ -1,14 +1,14 @@
 """Offline cost estimation utility.
 
 Port of the legacy ``check-batches/check_claude_cost.py`` live token-tally
-script into a self-contained, OFFLINE estimator. polybatch must never make
+script into a self-contained, OFFLINE estimator. relay must never make
 real/billable API calls, so this module never touches the network or reads an
 API key: it estimates input/output tokens from the input CSV, a model name,
 and a max_tokens budget, then multiplies by an editable per-model price
 table.
 
 The token-count heuristic (``len(text) // 4``) intentionally matches the
-default estimator used by ``polybatch.core.chunking.split_requests`` so the
+default estimator used by ``relay.core.chunking.split_requests`` so the
 cost estimate and the chunk-sizing estimate agree with each other.
 """
 
@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from polybatch.core.models import Record, TaskSpec
+from relay.core.models import Record, TaskSpec
 
 # ---------------------------------------------------------------------------
 # EDITABLE PRICE TABLE
@@ -57,7 +57,7 @@ def estimate_tokens(text: str) -> int:
     """Rough token estimate: ~4 characters per token.
 
     Single source of truth for the heuristic, matching
-    ``polybatch.core.chunking._default_estimate_tokens``.
+    ``relay.core.chunking._default_estimate_tokens``.
     """
     return len(text) // 4
 
@@ -124,7 +124,7 @@ def estimate_cost_for_records(
     Mirrors how the orchestrator builds each prompt:
     ``task.prompt_template.format(order_id=record.order_id, text=record.text)``.
     """
-    from polybatch.core.models import DEFAULT_TASK
+    from relay.core.models import DEFAULT_TASK
 
     task = task or DEFAULT_TASK
     prompts = [

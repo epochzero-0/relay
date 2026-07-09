@@ -1,4 +1,4 @@
-"""Generate a deterministic synthetic dataset for polybatch demos and tests.
+"""Generate a deterministic synthetic dataset for relay demos and tests.
 
 Writes a CSV with header "order_id,text" where each row is a zero-padded
 order_id (e.g. rec_0001) and a short neutral ASCII filler sentence assembled

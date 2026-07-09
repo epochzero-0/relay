@@ -1,6 +1,6 @@
-"""Google Gemini Batch adapter (extra: ``pip install polybatch[google]``).
+"""Google Gemini Batch adapter (extra: ``pip install relay[google]``).
 
-Implements the :class:`~polybatch.providers.base.Provider` protocol against the
+Implements the :class:`~relay.providers.base.Provider` protocol against the
 Google Gen AI SDK's batch API (``google-genai``, ``from google import genai``).
 
 RISK NOTE (read before trusting this against a live key)
@@ -8,8 +8,8 @@ RISK NOTE (read before trusting this against a live key)
 This is the one adapter with **no legacy reference script for crash-safe
 keying** and it was written without an API key to test against. The legacy
 ``submit_gemini_batches.py`` used *inlined* requests whose responses come back
-positionally in ``job.dest.inlined_responses`` with **no per-item id** — that
-cannot satisfy polybatch's contract that ``fetch_results(job_id)`` maps every
+positionally in ``job.dest.inlined_responses`` with **no per-item id** -- that
+cannot satisfy relay's contract that ``fetch_results(job_id)`` maps every
 result to its ``custom_id`` after a crash/resume (a fresh adapter has lost the
 original ordering).
 
@@ -37,14 +37,14 @@ import tempfile
 from pathlib import Path
 from typing import Iterator
 
-from polybatch.core.models import BatchResult, JobStatus, ProviderLimits, Request
-from polybatch.providers.base import BatchTooLargeError, TransientSubmitError
+from relay.core.models import BatchResult, JobStatus, ProviderLimits, Request
+from relay.providers.base import BatchTooLargeError, TransientSubmitError
 
 #: Default model. EDIT THIS to whatever Gemini model you want to batch against.
 DEFAULT_MODEL = "gemini-2.5-flash"
 
 #: Conservative default item ceiling; adjust to your quota. Gemini's documented
-#: batch limits are large but quota/token-bound, which polybatch cannot see.
+#: batch limits are large but quota/token-bound, which relay cannot see.
 DEFAULT_MAX_ITEMS = 50_000
 
 #: Registry metadata (consumed by the provider registry / CLI in checkpoint 4).
@@ -94,7 +94,7 @@ class GoogleBatchProvider:
         except ImportError as exc:  # pragma: no cover - trivial guard.
             raise ImportError(
                 "the 'google-genai' package is required for --provider google; "
-                "install it with: pip install polybatch[google]"
+                "install it with: pip install relay[google]"
             ) from exc
         return genai
 
@@ -109,7 +109,7 @@ class GoogleBatchProvider:
         return self._client_obj
 
     def _map_submit_error(self, exc: Exception) -> Exception:
-        """Translate a google-genai exception into polybatch's taxonomy."""
+        """Translate a google-genai exception into relay's taxonomy."""
         try:
             from google.genai import errors  # noqa: PLC0415
         except ImportError:  # pragma: no cover - errors module always ships.
@@ -142,7 +142,7 @@ class GoogleBatchProvider:
         client = self._client()
         payload = self._build_jsonl(requests)
 
-        tmp = Path(tempfile.mkdtemp(prefix="polybatch_google_")) / "batch.jsonl"
+        tmp = Path(tempfile.mkdtemp(prefix="relay_google_")) / "batch.jsonl"
         try:
             tmp.write_text(payload, encoding="utf-8")
             try:
@@ -204,7 +204,7 @@ class GoogleBatchProvider:
         if inlined:
             raise RuntimeError(
                 "google batch returned inlined_responses without keys; "
-                "polybatch requires the file-based (keyed) result path"
+                "relay requires the file-based (keyed) result path"
             )
 
     # ----- helpers ------------------------------------------------------

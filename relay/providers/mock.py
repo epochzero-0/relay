@@ -29,8 +29,8 @@ from __future__ import annotations
 import random
 from typing import Iterator
 
-from polybatch.core.models import BatchResult, JobStatus, ProviderLimits, Request
-from polybatch.providers.base import BatchTooLargeError, TransientSubmitError
+from relay.core.models import BatchResult, JobStatus, ProviderLimits, Request
+from relay.providers.base import BatchTooLargeError, TransientSubmitError
 
 
 class MockTransientError(TransientSubmitError):

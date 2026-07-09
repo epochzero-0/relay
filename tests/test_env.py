@@ -1,4 +1,4 @@
-"""Tests for the stdlib .env parser (polybatch/env.py)."""
+"""Tests for the stdlib .env parser (relay/env.py)."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from polybatch.env import load_env
+from relay.env import load_env
 
 
 def _write_env(tmp_path: Path, text: str) -> Path:

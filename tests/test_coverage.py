@@ -1,10 +1,10 @@
-"""Tests for polybatch.core.coverage: present_ids and missing_ids."""
+"""Tests for relay.core.coverage: present_ids and missing_ids."""
 
 from __future__ import annotations
 
 import csv
 
-from polybatch.core.coverage import missing_ids, present_ids
+from relay.core.coverage import missing_ids, present_ids
 
 
 def _write_csv(path, fieldnames, rows):

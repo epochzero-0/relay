@@ -1,4 +1,4 @@
-"""Tests for `polybatch demo`: the self-contained fault-tolerance narrative.
+"""Tests for `relay demo`: the self-contained fault-tolerance narrative.
 
 All runs go through Path(tmp_path) via an explicit --output-dir (never
 deleted by the demo, regardless of --keep) so nothing touches the real
@@ -15,11 +15,11 @@ import csv
 import sys
 from pathlib import Path
 
-from polybatch.cli import main
+from relay.cli import main
 
 
 def _run_cli(monkeypatch, argv: list[str]) -> int:
-    monkeypatch.setattr(sys, "argv", ["polybatch"] + argv)
+    monkeypatch.setattr(sys, "argv", ["relay"] + argv)
     return main()
 
 

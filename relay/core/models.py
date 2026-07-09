@@ -1,4 +1,4 @@
-"""Core data models shared across polybatch.
+"""Core data models shared across relay.
 
 These are deliberately small, transport-agnostic value objects. Providers
 translate them to/from their own wire formats; the orchestrator only ever
@@ -48,7 +48,7 @@ class Request:
 class ProviderLimits:
     """Per-batch ceilings advertised by a provider.
 
-    None means "no limit enforced by polybatch" for that dimension.
+    None means "no limit enforced by relay" for that dimension.
     """
 
     max_items_per_batch: int | None = None

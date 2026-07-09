@@ -1,4 +1,4 @@
-"""Shared pytest fixtures for the polybatch test suite.
+"""Shared pytest fixtures for the relay test suite.
 
 Everything here runs fully offline and instantly: no real sleeps, no network,
 no writes outside tmp_path. The orchestrator factory always zeroes every
@@ -12,9 +12,9 @@ from typing import Iterator
 
 import pytest
 
-from polybatch.core.models import Job, Record, TaskSpec
-from polybatch.core.orchestrator import Orchestrator
-from polybatch.providers.mock import MockProvider
+from relay.core.models import Job, Record, TaskSpec
+from relay.core.orchestrator import Orchestrator
+from relay.providers.mock import MockProvider
 
 #: A tiny, deterministic task template independent of DEFAULT_TASK so tests
 #: do not depend on the CLI's default wording. n_fields=2 matches

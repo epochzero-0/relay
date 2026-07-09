@@ -19,7 +19,7 @@ import re
 from dataclasses import dataclass
 from typing import Iterable
 
-from polybatch.core.models import BatchResult
+from relay.core.models import BatchResult
 
 
 @dataclass

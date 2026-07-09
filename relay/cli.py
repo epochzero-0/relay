@@ -1,8 +1,8 @@
-"""polybatch CLI: run / status / demo.
+"""relay CLI: run / status / demo.
 
-  polybatch run     load records, run the orchestrator against a provider.
-  polybatch status  print each chunk's tracked state from a tracker file.
-  polybatch demo    self-contained, deterministic fault-tolerance narrative.
+  relay run     load records, run the orchestrator against a provider.
+  relay status  print each chunk's tracked state from a tracker file.
+  relay demo    self-contained, deterministic fault-tolerance narrative.
 
 Real providers (openai/anthropic/google) are resolved through the provider
 registry; each requires its optional SDK extra to be installed and its API
@@ -18,14 +18,14 @@ import importlib.util
 import os
 from pathlib import Path
 
-from polybatch.core.models import DEFAULT_TASK, Job, Record
-from polybatch.core.orchestrator import Orchestrator
-from polybatch.core.tracker import Tracker
-from polybatch.cost import estimate_cost_for_records, format_estimate
-from polybatch.demo import run_demo
-from polybatch.env import load_env
-from polybatch.providers.mock import MockProvider
-from polybatch.providers.registry import get_provider_class, provider_names
+from relay.core.models import DEFAULT_TASK, Job, Record
+from relay.core.orchestrator import Orchestrator
+from relay.core.tracker import Tracker
+from relay.cost import estimate_cost_for_records, format_estimate
+from relay.demo import run_demo
+from relay.env import load_env
+from relay.providers.mock import MockProvider
+from relay.providers.registry import get_provider_class, provider_names
 
 
 def _load_records(path: Path, limit: int | None = None) -> list[Record]:
@@ -105,7 +105,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
             print(
                 f"the {provider_cls.sdk_module!r} package is required for "
                 f"--provider {args.provider}; install it with: "
-                f"pip install polybatch[{provider_cls.install_extra}]"
+                f"pip install relay[{provider_cls.install_extra}]"
             )
             return 2
 
@@ -203,7 +203,7 @@ def _cmd_demo(args: argparse.Namespace) -> int:
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="polybatch",
+        prog="relay",
         description="Fault-tolerant batch-inference orchestrator.",
     )
     sub = parser.add_subparsers(dest="command", required=True)

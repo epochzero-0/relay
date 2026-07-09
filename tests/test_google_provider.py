@@ -15,9 +15,9 @@ import types
 
 import pytest
 
-from polybatch.core.models import ProviderLimits, Request
-from polybatch.providers.base import BatchTooLargeError, TransientSubmitError
-from polybatch.providers.google import GoogleBatchProvider
+from relay.core.models import ProviderLimits, Request
+from relay.providers.base import BatchTooLargeError, TransientSubmitError
+from relay.providers.google import GoogleBatchProvider
 
 
 def _make_fake_google(*, job=None, result_bytes=b""):

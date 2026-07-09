@@ -1,11 +1,11 @@
-"""Light determinism/contract tests for polybatch.providers.mock.MockProvider."""
+"""Light determinism/contract tests for relay.providers.mock.MockProvider."""
 
 from __future__ import annotations
 
 import pytest
 
-from polybatch.core.models import ProviderLimits, Request
-from polybatch.providers.mock import MockBatchTooLargeError, MockProvider
+from relay.core.models import ProviderLimits, Request
+from relay.providers.mock import MockBatchTooLargeError, MockProvider
 
 
 def _requests(n: int) -> list[Request]:

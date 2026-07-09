@@ -25,10 +25,10 @@ import functools
 import json
 from pathlib import Path
 
-from polybatch.core.models import ProviderLimits, Record
-from polybatch.core.tracker import FAILED, SUBMIT_FAILED, Tracker
-from polybatch.providers.base import BatchTooLargeError
-from polybatch.providers.mock import MockProvider
+from relay.core.models import ProviderLimits, Record
+from relay.core.tracker import FAILED, SUBMIT_FAILED, Tracker
+from relay.providers.base import BatchTooLargeError
+from relay.providers.mock import MockProvider
 
 DATA_CSV = Path(__file__).resolve().parents[1] / "data" / "records.csv"
 

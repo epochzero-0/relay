@@ -35,12 +35,12 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Callable
 
-from polybatch.core.chunking import merge_rows, split_requests
-from polybatch.core.coverage import missing_ids, present_ids
-from polybatch.core.models import Job, ProviderLimits, Record, Request
-from polybatch.core.parsing import ParseFailure, parse_batch_results
-from polybatch.core.tracker import Tracker
-from polybatch.providers.base import BatchTooLargeError, Provider
+from relay.core.chunking import merge_rows, split_requests
+from relay.core.coverage import missing_ids, present_ids
+from relay.core.models import Job, ProviderLimits, Record, Request
+from relay.core.parsing import ParseFailure, parse_batch_results
+from relay.core.tracker import Tracker
+from relay.providers.base import BatchTooLargeError, Provider
 
 #: Error label the parser uses for unparseable (but non-errored) results. Used
 #: to split failures into parse failures vs. provider-side item errors.

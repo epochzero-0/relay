@@ -8,10 +8,10 @@ optional SDKs to be installed.
 
 from __future__ import annotations
 
-from polybatch.providers.anthropic import AnthropicBatchProvider
-from polybatch.providers.google import GoogleBatchProvider
-from polybatch.providers.mock import MockProvider
-from polybatch.providers.openai import OpenAIBatchProvider
+from relay.providers.anthropic import AnthropicBatchProvider
+from relay.providers.google import GoogleBatchProvider
+from relay.providers.mock import MockProvider
+from relay.providers.openai import OpenAIBatchProvider
 
 #: name -> provider class, for every provider the CLI knows about.
 #: MockProvider has no registry_name class attribute (its "mock" .name is set
