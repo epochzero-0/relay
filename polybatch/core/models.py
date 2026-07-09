@@ -14,6 +14,7 @@ position.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
 
 @dataclass(frozen=True)
@@ -88,3 +89,54 @@ class BatchResult:
     ok: bool
     text: str | None = None
     error: str | None = None
+
+
+@dataclass(frozen=True)
+class TaskSpec:
+    """What to ask the model, independent of any provider or dataset.
+
+    prompt_template is a str.format template with two placeholders,
+    {order_id} and {text}, filled per Record when building Requests. n_fields
+    is how many numeric values the parser should expect back per item.
+    """
+
+    prompt_template: str
+    n_fields: int
+    system: str | None = None
+    max_tokens: int = 64
+
+
+@dataclass(frozen=True)
+class Job:
+    """One end-to-end unit of work: a run over a fixed set of records.
+
+    records is a tuple so the dataclass stays frozen and hashable-friendly.
+    output_dir receives the run CSV and failures JSON; tracker_path is the
+    per-run JSON state file that makes the run resumable.
+    """
+
+    run_id: int
+    records: tuple[Record, ...]
+    task: TaskSpec
+    output_dir: Path
+    tracker_path: Path
+
+
+#: A generic, domain-neutral scoring task used as the CLI default. It asks the
+#: model to score the input text on two 0-10 integer dimensions and reply on a
+#: single comma-separated line, matching n_fields=2.
+DEFAULT_TASK = TaskSpec(
+    prompt_template=(
+        "Score the following text on two dimensions, each an integer from 0 to "
+        "10:\n"
+        "  1. quality  - how clear and well-formed the text is\n"
+        "  2. interest - how novel or engaging the text is\n\n"
+        "Reply with exactly one line and nothing else, in the form:\n"
+        "  order_id,quality,interest\n\n"
+        "order_id: {order_id}\n"
+        "text: {text}"
+    ),
+    n_fields=2,
+    system="You are a careful evaluator. Reply as: order_id,score1,score2",
+    max_tokens=64,
+)
