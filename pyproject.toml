@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "polybatch"
+version = "0.1.0"
+description = "Fault-tolerant, resumable multi-provider batch-inference orchestrator"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.optional-dependencies]
+openai = ["openai>=1.40"]
+anthropic = ["anthropic>=0.34"]
+google = ["google-genai>=0.3"]
+dev = ["pytest>=8.0"]
+all = [
+    "openai>=1.40",
+    "anthropic>=0.34",
+    "google-genai>=0.3",
+    "python-dotenv>=1.0",
+]
+
+[project.scripts]
+polybatch = "polybatch.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["polybatch*"]
