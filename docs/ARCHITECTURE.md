@@ -18,8 +18,8 @@ atomically. Providers can return results out of order, drop items
 silently, or complete a batch only partially. A parse-back keyed on a
 value round-tripped through the provider's own opaque identifier is
 robust to reordering, to partial completion, and to a provider that never
-promised ordering guarantees in the first place. The alternative --
-assuming result position `i` corresponds to request position `i` -- is a
+promised ordering guarantees in the first place. The alternative,
+assuming result position `i` corresponds to request position `i`, is a
 correctness bug waiting for the first dropped item.
 
 ## Tracker state machine
@@ -27,9 +27,9 @@ correctness bug waiting for the first dropped item.
 A JSON file (`Tracker`, in `relay/core/tracker.py`) records the state of
 every chunk:
 
-- `not_submitted` -- implicit: the chunk's key is simply absent from the
+- `not_submitted` is implicit: the chunk's key is simply absent from the
   tracker.
-- `submitted` -- has a `job_id`; the chunk was handed to the provider and
+- `submitted` has a `job_id`; the chunk was handed to the provider and
   is awaiting a terminal result.
 - terminal states: `done`, `partial_failed`, `failed`, `submit_failed`.
 
@@ -37,7 +37,7 @@ Every state transition is saved atomically: write the new tracker
 contents to a temp file, then `os.replace` it over the real path. `os.replace`
 is atomic at the OS level (POSIX `rename(2)`, Windows `MoveFileEx` with
 replace semantics), so a reader can never observe a half-written tracker
-file -- it is either the old complete state or the new complete state,
+file: it is either the old complete state or the new complete state,
 never bytes of both.
 
 Just as important as the write mechanics is the ordering: the new state
@@ -65,7 +65,7 @@ anything new.
 **Why this gives no-double-charge**: the failure mode this guards against
 is a crash between "provider accepted the batch" and "we recorded the
 result." Without a resume drain, a naive restart would see no recorded
-result for that chunk's items and resubmit them -- charging twice for
+result for that chunk's items and resubmit them, charging twice for
 work the provider already did or is still doing. Because the drain always
 runs first and treats an existing `job_id` as authoritative in-flight
 work to be collected rather than evidence to be second-guessed, in-flight
@@ -74,7 +74,7 @@ crashes and restarts. A crash between submit and fetch costs nothing.
 
 ## Multi-pass coverage loop
 
-The output CSV -- not the tracker -- is the source of truth for what has
+The output CSV, not the tracker, is the source of truth for what has
 been completed. Each pass:
 
 1. Reads the output CSV and computes which `order_id`s from the input are
@@ -87,8 +87,8 @@ been completed. Each pass:
 (submitted, done, failed, ...), but what actually matters for correctness
 is whether a usable result was durably written for a given order id. Using
 the output CSV as the ground truth for "is this item done" means the
-system survives a tracker/CSV divergence -- for example a tracker that
-says `done` but a CSV write that was interrupted -- because the next pass
+system survives a tracker/CSV divergence (for example a tracker that
+says `done` but a CSV write that was interrupted) because the next pass
 will simply see the id is still missing from the CSV and re-request it.
 It also makes convergence directly checkable: "coverage" is just "count of
 distinct order ids present in the output CSV divided by count in the
@@ -103,7 +103,7 @@ input order. If a provider rejects a batch as too large
 orchestrator halves its effective `max_items_per_batch` (down to a floor
 of 1) and re-chunks on the next pass.
 
-This means oversized batches self-correct without manual tuning -- you do
+This means oversized batches self-correct without manual tuning: you do
 not need to know a provider's exact limit in advance, or hand-tune a
 batch size per model; the system converges to a working size within a
 small number of passes, at the cost of those extra passes when the
@@ -114,7 +114,7 @@ initial guess is too large.
 A provider's `TransientSubmitError` (for example a simulated or real HTTP
 429) is retried with backoff `min(backoff_cap, backoff_base * 2**(attempt-1))`,
 up to a fixed number of attempts, before the chunk is marked
-`submit_failed`. A chunk marked `submit_failed` is not lost -- it is
+`submit_failed`. A chunk marked `submit_failed` is not lost; it is
 picked up again on a later pass through the normal coverage loop, so a
 provider that is transiently overloaded does not require operator
 intervention, only patience across passes.
@@ -163,5 +163,5 @@ step-0 resume drain, the multi-pass coverage loop, and the crash-safe
 tracker all just call it and act on what it returns. A chunk already
 `done` is skipped outright (no double work); a chunk `submitted` with a
 `job_id` is resumed, never resubmitted (no double charge); anything
-else -- `not_submitted`, `partial_failed`, `failed`, or `submit_failed` --
+else (`not_submitted`, `partial_failed`, `failed`, or `submit_failed`)
 is a candidate for submission on the current pass.

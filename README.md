@@ -1,6 +1,6 @@
 # Relay
 
-A batch-inference orchestrator that treats a crash as a normal event -- it
+A batch-inference orchestrator that treats a crash as a normal event. It
 resumes in-flight jobs without re-charging you, and re-sends only what's
 missing until it can prove 100% coverage.
 
@@ -60,7 +60,7 @@ DEMO PASSED -- fault tolerance verified end to end
 and despite 10% item errors, 10% dropped items, and 30% simulated 429s on
 submit, the orchestrator converges to 100% coverage in 5 passes, resending
 only 92 of the 300 original items in total. **Act 2** reruns the same job
-against the same tracker and output CSV -- coverage is already 100%, so
+against the same tracker and output CSV. Coverage is already 100%, so
 zero items are resubmitted. That zero-resubmit rerun is the crash-safety
 guarantee in miniature: resuming a finished (or partially finished) run
 never re-does work it already did, and never double-charges you.
@@ -71,7 +71,7 @@ never re-does work it already did, and never double-charges you.
 pip install -e .
 ```
 
-The core is stdlib-only -- no runtime dependencies are required for the
+The core is stdlib-only: no runtime dependencies are required for the
 mock provider, the CLI, the tracker, or the demo. Provider SDKs are
 opt-in extras: `.[openai]`, `.[anthropic]`, `.[google]`, `.[dev]` (pytest),
 `.[all]` (every provider SDK).
@@ -90,7 +90,7 @@ partial completion. A crash-safe JSON tracker records every chunk's state
 through an atomic write pattern (temp file + `os.replace`), and before any
 coverage math runs, a step-0 resume drain polls in-flight jobs from a prior
 crashed run instead of resubmitting them. Each pass then recomputes which
-order ids are still missing from the output CSV -- the source of truth --
+order ids are still missing from the output CSV (the source of truth)
 and re-sends only those, while oversized batches self-correct via
 shrink-and-rechunk and transient submit errors are retried with
 exponential backoff. Full design, state diagram, and guarantees: see
@@ -143,7 +143,7 @@ Prints an ASCII table of `chunk / status / job_id` from the tracker file.
 
 ### `relay cost`
 
-Offline token/cost estimate for a batch job -- no network calls.
+Offline token/cost estimate for a batch job. No network calls.
 
 | flag | default | meaning |
 | --- | --- | --- |
@@ -190,7 +190,7 @@ hint. If the API key is missing, it exits 2 naming the env var it expected.
 
 The three real-provider adapters (`relay/providers/openai.py`,
 `anthropic.py`, `google.py`) are unit-tested against fake SDK modules
-injected into `sys.modules` -- request building, status normalization,
+injected into `sys.modules`: request building, status normalization,
 result parsing, and error-taxonomy mapping are all covered offline, but
 none of the three has been exercised against a live API. The **Google
 adapter is the least proven** of the three: it uses a file-based
@@ -234,7 +234,7 @@ tests/
 pytest -q
 ```
 
-150 tests, all offline and keyless -- no network access, no API keys, and
+150 tests, all offline and keyless: no network access, no API keys, and
 no real provider SDKs required (the real-provider tests run against fake
 SDK modules injected into `sys.modules`).
 
