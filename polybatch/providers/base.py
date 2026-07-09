@@ -27,6 +27,29 @@ from typing import Iterator, Protocol, runtime_checkable
 from polybatch.core.models import BatchResult, JobStatus, ProviderLimits, Request
 
 
+# ----- error taxonomy --------------------------------------------------------
+# Providers signal *why* a submit failed by the exception type they raise, so
+# the orchestrator can decide whether (and how) to retry. Concrete providers
+# raise these or subclasses of them from submit().
+
+
+class TransientSubmitError(RuntimeError):
+    """A retryable submit failure (rate limit / HTTP 429 / flaky network).
+
+    The orchestrator re-submits the same chunk, with exponential backoff, up
+    to its retry ceiling. The chunk should be submittable unchanged.
+    """
+
+
+class BatchTooLargeError(ValueError):
+    """A submit rejected because the batch exceeds a provider size limit.
+
+    NOT retryable as-is: re-submitting the identical chunk would fail again.
+    The orchestrator instead shrinks its effective chunk size and lets the
+    coverage re-send loop re-chunk the skipped items at the smaller size.
+    """
+
+
 @runtime_checkable
 class Provider(Protocol):
     """Structural contract for a batch-inference backend.
@@ -44,9 +67,11 @@ class Provider(Protocol):
     def submit(self, requests: list[Request]) -> str:
         """Submit one chunk of requests. Returns an opaque job_id.
 
-        Called at most once per chunk. Implementations should raise on
-        transient errors (so the orchestrator can retry) and on batches that
-        exceed self.limits.
+        Called at most once per chunk. Implementations should raise
+        TransientSubmitError (or a subclass) on retryable failures so the
+        orchestrator can retry with backoff, and BatchTooLargeError (or a
+        subclass) when the batch exceeds self.limits so the orchestrator can
+        shrink its chunk size instead of retrying the same batch.
         """
         ...
 

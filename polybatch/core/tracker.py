@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from pathlib import Path
 from typing import Any
 
@@ -86,6 +87,38 @@ class Tracker:
     def summary(self) -> dict[str, str]:
         """Return a key -> status mapping for every known chunk."""
         return {key: self.status(key) for key in self._chunks}
+
+    def submitted_keys(self, prefix: str) -> list[str]:
+        """Return keys under `prefix` that are SUBMITTED and have a job id.
+
+        Used by the orchestrator's resume-drain step to find in-flight jobs
+        from a crashed process so they are polled/fetched rather than
+        re-submitted (which would double-spend).
+        """
+        keys: list[str] = []
+        for key, entry in self._chunks.items():
+            if not key.startswith(prefix):
+                continue
+            if entry.get("status") != SUBMITTED:
+                continue
+            if entry.get("job_id"):
+                keys.append(key)
+        return keys
+
+    def next_pass(self, prefix: str) -> int:
+        """Return the next coverage-pass number for keys under `prefix`.
+
+        Scans existing keys matching `{prefix}p(\\d+)_` and returns max + 1
+        (1 if none exist), so pass numbers -- and therefore chunk keys -- never
+        collide across crashes or resumes.
+        """
+        pattern = re.compile(re.escape(prefix) + r"p(\d+)_")
+        highest = 0
+        for key in self._chunks:
+            match = pattern.match(key)
+            if match:
+                highest = max(highest, int(match.group(1)))
+        return highest + 1
 
     # ----- transitions -------------------------------------------------
 

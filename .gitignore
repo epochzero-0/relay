@@ -11,4 +11,5 @@ build/
 .coverage
 plan.md
 progress.md
+interfaces.md
 /legacy

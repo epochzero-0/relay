@@ -1,20 +1,29 @@
-"""Orchestrator: the happy-path run loop.
+"""Orchestrator: the multi-pass, fault-tolerant run loop.
 
-run(job) drives one run end to end:
-    build requests -> chunk -> (skip | resume | submit) -> poll -> fetch ->
-    parse -> merge to CSV -> mark done.
+run(job) drives one run to full coverage:
+    step 0 (resume drain) -> coverage loop over passes:
+        compute missing ids -> build requests for only the missing records ->
+        chunk -> submit (backoff retry) -> poll -> fetch -> parse ->
+        merge to CSV -> mark. Repeat until the CSV covers every expected id
+        or max_passes is exhausted.
 
-This is a port of the legacy submit/poll/download loop, generalized to any
-Provider and to multiple chunks, with per-chunk crash recovery via the Tracker.
+This is a port of the legacy submit/poll/download loop plus the legacy
+fix_missing script, generalized to any Provider and unified into one loop:
+coverage (missing_ids over the run CSV) drives re-sends, so dropped items,
+expired batches, and failed submits all heal on a later pass.
 
-Phase 1 is the happy path only: a bounded retry on submit, but NO failure
-injection, NO coverage-based partial_failed enforcement, and NO exponential
-backoff or re-send loop. Those are Phase 2. The seams are left clean: chunks
-that partially fail or error still get recorded, and merge_rows keeps CSV
-writes idempotent so a future re-send folds in cleanly.
+Fault-tolerance design:
+  * Step 0 drains in-flight jobs left SUBMITTED by a crashed process, polling
+    and fetching them BEFORE any coverage computation so their work is never
+    re-submitted (no double spend).
+  * Submit retries use exponential backoff (backoff_base * 2**(attempt-1),
+    capped at backoff_cap). BatchTooLargeError is NOT retried: the orchestrator
+    halves its effective chunk size and lets the next pass re-chunk smaller.
+  * Pass numbers are allocated from the tracker (next_pass), so chunk keys
+    never collide across crashes/resumes.
 
-All sleeping happens only through poll_interval / submit_delay, so tests can
-pass 0 and run instantly.
+All sleeping happens only through poll_interval / submit_delay / backoff_base,
+so tests can pass 0 for all three and run instantly.
 """
 
 from __future__ import annotations
@@ -27,10 +36,11 @@ from pathlib import Path
 from typing import Callable
 
 from polybatch.core.chunking import merge_rows, split_requests
-from polybatch.core.models import Job, Request
+from polybatch.core.coverage import missing_ids, present_ids
+from polybatch.core.models import Job, ProviderLimits, Record, Request
 from polybatch.core.parsing import ParseFailure, parse_batch_results
 from polybatch.core.tracker import Tracker
-from polybatch.providers.base import Provider
+from polybatch.providers.base import BatchTooLargeError, Provider
 
 #: Error label the parser uses for unparseable (but non-errored) results. Used
 #: to split failures into parse failures vs. provider-side item errors.
@@ -52,13 +62,30 @@ class RunReport:
     item_errors: int
     output_csv: Path
     coverage: float
+    # ----- Phase 2 additions -----
+    passes: int
+    resent_items: int
+    recovered_items: int
+    converged: bool
+
+
+@dataclass
+class _ChunkOutcome:
+    """Counts produced by completing one job (drained or freshly submitted)."""
+
+    ok: int = 0
+    parse_failures: int = 0
+    item_errors: int = 0
+    state: str = ""
 
 
 class Orchestrator:
     """Drives a Provider through the chunk lifecycle for one Job at a time.
 
     Holds no module-level or cross-run state; every run is self-contained and
-    resumable purely from the Job's tracker file.
+    resumable purely from the Job's tracker file. The one piece of per-run
+    mutable state (the shrinking effective item limit) lives on the stack of
+    run(), not on the instance.
     """
 
     def __init__(
@@ -67,110 +94,155 @@ class Orchestrator:
         poll_interval: float = 1.0,
         submit_delay: float = 0.0,
         max_submit_retries: int = 3,
+        backoff_base: float = 1.0,
+        backoff_cap: float = 30.0,
+        max_passes: int = 5,
         log: Callable[[str], None] = print,
     ) -> None:
         self.provider = provider
         self.poll_interval = poll_interval
         self.submit_delay = submit_delay
         self.max_submit_retries = max_submit_retries
+        self.backoff_base = backoff_base
+        self.backoff_cap = backoff_cap
+        self.max_passes = max_passes
         self.log = log
 
     # ----- public API --------------------------------------------------
 
     def run(self, job: Job) -> RunReport:
-        """Execute the job end to end and return a RunReport."""
+        """Execute the job to full coverage (or max_passes) and report."""
         job.output_dir.mkdir(parents=True, exist_ok=True)
         tracker = Tracker(job.tracker_path)
 
-        requests = self._build_requests(job)
-        chunks = split_requests(requests, self.provider.limits)
+        expected = [record.order_id for record in job.records]
+        by_id = {record.order_id: record for record in job.records}
         output_csv = job.output_dir / f"run{job.run_id}.csv"
+        prefix = f"run{job.run_id}_"
 
-        self.log(
-            f"run {job.run_id}: {len(requests)} records -> {len(chunks)} chunks"
-        )
+        # Effective per-batch item ceiling. Starts at the provider's declared
+        # limit (or None) and is halved whenever a batch is rejected as too
+        # large, for the rest of this run.
+        effective_max_items = self.provider.limits.max_items_per_batch
 
-        skipped = 0
-        resumed = 0
-        submitted = 0
-        # (chunk index, tracker key, job_id) for every chunk we must poll.
-        in_flight: list[tuple[int, str, str]] = []
+        self.log(f"run {job.run_id}: {len(expected)} records, up to {self.max_passes} passes")
 
-        # ---- phase 1: decide + submit each chunk ----
-        for i, chunk in enumerate(chunks):
-            key = f"run{job.run_id}_chunk{i}"
-            action, saved_job_id = tracker.decide(key)
+        totals = _ChunkOutcome()
+        submitted_chunks = 0
+        total_chunks = 0
+        recovered_items = 0
+        resent_items = 0
 
-            if action == "skip":
-                skipped += 1
-                self.log(f"[chunk {i}] skip (already done)")
+        # ---- step 0: resume drain (crash recovery, before coverage) ----
+        drain_keys = tracker.submitted_keys(prefix)
+        resumed_chunks = len(drain_keys)
+        for key in drain_keys:
+            job_id = tracker.job_id(key)
+            if job_id is None:  # defensive; submitted_keys already filters this.
                 continue
+            self.log(f"[drain {key}] resuming in-flight job {job_id}")
+            outcome = self._complete_job(
+                job, key, job_id, expected_count=None,
+                output_csv=output_csv, tracker=tracker,
+            )
+            self._accumulate(totals, outcome)
+            recovered_items += outcome.ok
 
-            if action == "resume" and saved_job_id is not None:
-                resumed += 1
-                self.log(f"[chunk {i}] resuming job {saved_job_id}")
-                in_flight.append((i, key, saved_job_id))
-                continue
+        # ---- coverage loop ----
+        passes = 0
+        for invocation_ordinal in range(self.max_passes):
+            missing = missing_ids(expected, output_csv)
+            if not missing:
+                break
 
-            job_id = self._submit_with_retry(i, key, chunk, tracker)
-            if job_id is None:
-                continue  # submit_failed already recorded; do not crash the run.
-            submitted += 1
-            in_flight.append((i, key, job_id))
-
-        # ---- phase 2: poll + download each in-flight chunk ----
-        succeeded = 0
-        parse_failures = 0
-        item_errors = 0
-
-        for i, key, job_id in in_flight:
-            state = self._poll_to_terminal(i, job_id)
-            if state != "ended":
-                tracker.mark_failed(key, state)
-                self.log(f"[chunk {i}] terminal state {state} -- marked failed")
-                continue
-
-            rows, failures = self._download(job_id, job.task.n_fields)
-            self._write_rows(output_csv, rows, job.task.n_fields)
-            self._append_failures(job, failures)
-
-            n_parse = sum(1 for f in failures if f.error == _PARSE_FAILURE)
-            n_item = len(failures) - n_parse
-            succeeded += len(rows)
-            parse_failures += n_parse
-            item_errors += n_item
-
-            tracker.mark_done(key, succeeded=len(rows), failed=len(failures))
+            passes += 1
+            n = tracker.next_pass(prefix)
+            missing_records = [by_id[order_id] for order_id in missing]
+            requests = self._build_requests(job, missing_records)
+            limits = ProviderLimits(
+                max_items_per_batch=effective_max_items,
+                max_tokens_per_batch=self.provider.limits.max_tokens_per_batch,
+            )
+            chunks = split_requests(requests, limits)
             self.log(
-                f"[chunk {i}] done: {len(rows)} ok, "
-                f"{n_parse} parse failures, {n_item} item errors"
+                f"[pass {n}] {len(missing)} missing -> {len(chunks)} chunks"
             )
 
-        total = len(job.records)
-        coverage = (succeeded / total) if total else 0.0
+            # Submit every chunk first so batches process server-side in
+            # parallel; poll/fetch afterwards. (key, chunk size, job_id) per
+            # successfully submitted chunk.
+            in_flight: list[tuple[str, int, str]] = []
+            for i, chunk in enumerate(chunks):
+                key = f"run{job.run_id}_p{n}_chunk{i}"
+                total_chunks += 1
+                # decide() on fresh pass keys is always "submit"; called for
+                # uniformity with the tracker's state machine.
+                tracker.decide(key)
+
+                job_id, too_large = self._submit_with_retry(
+                    key, chunk, tracker
+                )
+                if too_large:
+                    # Shrink and stop submitting this pass; the next pass
+                    # re-chunks the still-missing items at the smaller size.
+                    base = effective_max_items if effective_max_items else len(chunk)
+                    effective_max_items = max(1, base // 2)
+                    self.log(
+                        f"[{key}] batch too large; "
+                        f"max_items_per_batch -> {effective_max_items}"
+                    )
+                    break
+                if job_id is None:
+                    continue  # submit_failed recorded; next pass retries.
+
+                submitted_chunks += 1
+                if invocation_ordinal > 0:
+                    resent_items += len(chunk)
+                in_flight.append((key, len(chunk), job_id))
+
+            for key, chunk_size, job_id in in_flight:
+                outcome = self._complete_job(
+                    job, key, job_id, expected_count=chunk_size,
+                    output_csv=output_csv, tracker=tracker,
+                )
+                self._accumulate(totals, outcome)
+
+        # ---- final coverage, computed from the CSV (fixes the rerun wart) ----
+        present = present_ids(output_csv)
+        total = len(expected)
+        covered = sum(1 for order_id in expected if order_id in present)
+        coverage = (covered / total) if total else 0.0
+        converged = covered == total
+
         report = RunReport(
             run_id=job.run_id,
             total_records=total,
-            chunks=len(chunks),
-            skipped_chunks=skipped,
-            resumed_chunks=resumed,
-            submitted_chunks=submitted,
-            succeeded=succeeded,
-            parse_failures=parse_failures,
-            item_errors=item_errors,
+            chunks=total_chunks,
+            skipped_chunks=0,
+            resumed_chunks=resumed_chunks,
+            submitted_chunks=submitted_chunks,
+            succeeded=totals.ok,
+            parse_failures=totals.parse_failures,
+            item_errors=totals.item_errors,
             output_csv=output_csv,
             coverage=coverage,
+            passes=passes,
+            resent_items=resent_items,
+            recovered_items=recovered_items,
+            converged=converged,
         )
         self._log_summary(report)
         return report
 
     # ----- internals ---------------------------------------------------
 
-    def _build_requests(self, job: Job) -> list[Request]:
+    def _build_requests(
+        self, job: Job, records: list[Record]
+    ) -> list[Request]:
         """Turn each Record into a provider Request via the task template."""
         task = job.task
         requests: list[Request] = []
-        for record in job.records:
+        for record in records:
             prompt = task.prompt_template.format(
                 order_id=record.order_id, text=record.text
             )
@@ -185,34 +257,99 @@ class Orchestrator:
         return requests
 
     def _submit_with_retry(
-        self, i: int, key: str, chunk: list[Request], tracker: Tracker
-    ) -> str | None:
-        """Submit one chunk with a bounded, fixed-delay retry.
+        self, key: str, chunk: list[Request], tracker: Tracker
+    ) -> tuple[str | None, bool]:
+        """Submit one chunk with bounded, exponential-backoff retry.
 
-        Returns the job id on success (and records mark_submitted), or None on
-        exhaustion (and records mark_submit_failed). Never raises past here, so
-        one bad chunk cannot crash the whole run.
+        Returns (job_id, too_large):
+          * (job_id, False) on success (mark_submitted recorded).
+          * (None, True) if the batch was rejected as too large -- NOT retried;
+            mark_submit_failed recorded and the caller shrinks its chunk size.
+          * (None, False) on any other error after all retries are exhausted
+            (mark_submit_failed recorded). Never raises past here, so one bad
+            chunk cannot crash the whole run.
         """
         last_error = "unknown"
         for attempt in range(1, self.max_submit_retries + 1):
             try:
                 job_id = self.provider.submit(chunk)
+            except BatchTooLargeError as exc:
+                tracker.mark_submit_failed(key, str(exc))
+                self.log(f"[{key}] submit rejected (too large): {exc}")
+                return (None, True)
             except Exception as exc:  # noqa: BLE001 - bounded retry by design.
                 last_error = str(exc)
-                self.log(f"[chunk {i}] submit attempt {attempt} failed: {exc}")
+                self.log(f"[{key}] submit attempt {attempt} failed: {exc}")
                 if attempt < self.max_submit_retries:
-                    time.sleep(self.submit_delay)
+                    time.sleep(self._backoff(attempt))
                 continue
             tracker.mark_submitted(key, job_id)
-            self.log(f"[chunk {i}] submitted job {job_id}")
+            self.log(f"[{key}] submitted job {job_id}")
             time.sleep(self.submit_delay)
-            return job_id
+            return (job_id, False)
 
         tracker.mark_submit_failed(key, last_error)
-        self.log(f"[chunk {i}] submit failed after {self.max_submit_retries} tries")
-        return None
+        self.log(f"[{key}] submit failed after {self.max_submit_retries} tries")
+        return (None, False)
 
-    def _poll_to_terminal(self, i: int, job_id: str) -> str:
+    def _backoff(self, attempt: int) -> float:
+        """Exponential backoff wait for a 1-indexed retry attempt."""
+        return min(self.backoff_cap, self.backoff_base * 2 ** (attempt - 1))
+
+    def _complete_job(
+        self,
+        job: Job,
+        key: str,
+        job_id: str,
+        expected_count: int | None,
+        output_csv: Path,
+        tracker: Tracker,
+    ) -> _ChunkOutcome:
+        """Poll a job to terminal, then fetch/parse/merge and mark the tracker.
+
+        expected_count is the chunk's item count for freshly-submitted chunks;
+        None for drained jobs (whose original size is not recorded), in which
+        case the count of returned results is used as the expectation.
+        """
+        state = self._poll_to_terminal(key, job_id)
+        if state != "ended":
+            tracker.mark_failed(key, state)
+            self.log(f"[{key}] terminal state {state} -- marked failed")
+            return _ChunkOutcome(state=state)
+
+        rows, failures = self._download(job_id, job.task.n_fields)
+        self._write_rows(output_csv, rows, job.task.n_fields)
+        self._append_failures(job, failures)
+
+        ok = len(rows)
+        n_parse = sum(1 for f in failures if f.error == _PARSE_FAILURE)
+        n_item = len(failures) - n_parse
+        expected = expected_count if expected_count is not None else ok + len(failures)
+
+        if ok < expected:
+            tracker.mark_partial_failed(key, succeeded=ok, expected=expected)
+            self.log(
+                f"[{key}] partial: {ok}/{expected} ok, "
+                f"{n_parse} parse failures, {n_item} item errors"
+            )
+        else:
+            tracker.mark_done(key, succeeded=ok, failed=len(failures))
+            self.log(
+                f"[{key}] done: {ok} ok, "
+                f"{n_parse} parse failures, {n_item} item errors"
+            )
+        return _ChunkOutcome(
+            ok=ok, parse_failures=n_parse, item_errors=n_item, state=state
+        )
+
+    @staticmethod
+    def _accumulate(totals: _ChunkOutcome, outcome: _ChunkOutcome) -> None:
+        """Fold a chunk's counts into the run totals."""
+        totals.ok += outcome.ok
+        totals.parse_failures += outcome.parse_failures
+        totals.item_errors += outcome.item_errors
+
+    def _poll_to_terminal(self, label: str, job_id: str) -> str:
         """Poll a job until it reaches a terminal state; return that state.
 
         Transient poll exceptions are logged and retried (legacy behavior).
@@ -221,13 +358,13 @@ class Orchestrator:
             try:
                 status = self.provider.poll(job_id)
             except Exception as exc:  # noqa: BLE001 - transient; keep polling.
-                self.log(f"[chunk {i}] poll error (retrying): {exc}")
+                self.log(f"[{label}] poll error (retrying): {exc}")
                 time.sleep(self.poll_interval)
                 continue
 
             done = status.succeeded + status.errored
             total = done + status.processing
-            self.log(f"[chunk {i}] {status.state} {done}/{total}")
+            self.log(f"[{label}] {status.state} {done}/{total}")
 
             if status.is_terminal:
                 return status.state
@@ -249,7 +386,7 @@ class Orchestrator:
 
         Rows arrive as {"order_id", "values": [...]} and are flattened to the
         columns order_id,v1..v{n_fields}. Any existing CSV is read and merged
-        (dedupe by order_id, keep last) so reruns and future re-sends do not
+        (dedupe by order_id, keep last) so reruns and re-sends do not
         duplicate rows.
         """
         columns = ["order_id"] + [f"v{j}" for j in range(1, n_fields + 1)]
@@ -292,14 +429,17 @@ class Orchestrator:
             "----- run summary -----",
             f"run id           : {report.run_id}",
             f"records          : {report.total_records}",
+            f"passes           : {report.passes}",
             f"chunks           : {report.chunks}",
-            f"  skipped        : {report.skipped_chunks}",
             f"  resumed        : {report.resumed_chunks}",
             f"  submitted      : {report.submitted_chunks}",
             f"succeeded        : {report.succeeded}",
+            f"recovered        : {report.recovered_items}",
+            f"resent           : {report.resent_items}",
             f"parse failures   : {report.parse_failures}",
             f"item errors      : {report.item_errors}",
             f"coverage         : {report.coverage * 100:.1f}%",
+            f"converged        : {report.converged}",
             f"output           : {report.output_csv}",
             "-----------------------",
         ]

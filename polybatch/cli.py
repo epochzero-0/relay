@@ -56,7 +56,13 @@ def _cmd_run(args: argparse.Namespace) -> int:
         print(f"no records loaded from {input_path}")
         return 2
 
-    provider = MockProvider(seed=args.seed)
+    provider = MockProvider(
+        seed=args.seed,
+        error_rate=args.error_rate,
+        drop_rate=args.drop_rate,
+        submit_failure_rate=args.submit_failure_rate,
+        expire_rate=args.expire_rate,
+    )
     job = Job(
         run_id=args.run_id,
         records=tuple(records),
@@ -64,7 +70,12 @@ def _cmd_run(args: argparse.Namespace) -> int:
         output_dir=Path(args.output_dir),
         tracker_path=Path(args.tracker),
     )
-    orchestrator = Orchestrator(provider, poll_interval=args.poll_interval)
+    orchestrator = Orchestrator(
+        provider,
+        poll_interval=args.poll_interval,
+        backoff_base=args.backoff_base,
+        max_passes=args.max_passes,
+    )
     orchestrator.run(job)
     return 0
 
@@ -119,6 +130,30 @@ def _build_parser() -> argparse.ArgumentParser:
     run_p.add_argument("--seed", type=int, default=0, help="mock provider seed")
     run_p.add_argument(
         "--limit-items", type=int, default=None, help="cap records loaded"
+    )
+    run_p.add_argument(
+        "--error-rate", type=float, default=0.0,
+        help="mock: fraction of items returned as errors",
+    )
+    run_p.add_argument(
+        "--drop-rate", type=float, default=0.0,
+        help="mock: fraction of items dropped (partial batch)",
+    )
+    run_p.add_argument(
+        "--submit-failure-rate", type=float, default=0.0,
+        help="mock: probability submit raises a transient error",
+    )
+    run_p.add_argument(
+        "--expire-rate", type=float, default=0.0,
+        help="mock: probability a job's terminal state is expired",
+    )
+    run_p.add_argument(
+        "--max-passes", type=int, default=5,
+        help="max coverage re-send passes per run",
+    )
+    run_p.add_argument(
+        "--backoff-base", type=float, default=0.5,
+        help="base seconds for exponential submit-retry backoff",
     )
     run_p.set_defaults(func=_cmd_run)
 
