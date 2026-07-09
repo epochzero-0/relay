@@ -2,7 +2,7 @@
 
   polybatch run     load records, run the orchestrator against a provider.
   polybatch status  print each chunk's tracked state from a tracker file.
-  polybatch demo    placeholder (the scripted demo arrives in Phase 3).
+  polybatch demo    self-contained, deterministic fault-tolerance narrative.
 
 Only the mock provider is wired up in Phase 1; real providers arrive in
 Phase 4.
@@ -17,6 +17,7 @@ from pathlib import Path
 from polybatch.core.models import DEFAULT_TASK, Job, Record
 from polybatch.core.orchestrator import Orchestrator
 from polybatch.core.tracker import Tracker
+from polybatch.demo import run_demo
 from polybatch.providers.mock import MockProvider
 
 
@@ -104,9 +105,9 @@ def _cmd_status(args: argparse.Namespace) -> int:
     return 0
 
 
-def _cmd_demo(_args: argparse.Namespace) -> int:
-    print("demo arrives in Phase 3")
-    return 0
+def _cmd_demo(args: argparse.Namespace) -> int:
+    output_dir = Path(args.output_dir) if args.output_dir else None
+    return run_demo(seed=args.seed, output_dir=output_dir, keep=args.keep)
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -163,7 +164,20 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     status_p.set_defaults(func=_cmd_status)
 
-    demo_p = sub.add_parser("demo", help="scripted demo (Phase 3)")
+    demo_p = sub.add_parser(
+        "demo", help="scripted, self-contained fault-tolerance narrative"
+    )
+    demo_p.add_argument(
+        "--seed", type=int, default=7, help="mock provider seed"
+    )
+    demo_p.add_argument(
+        "--output-dir", default=None,
+        help="output directory (default: a fresh temp dir, cleaned up unless --keep)",
+    )
+    demo_p.add_argument(
+        "--keep", action="store_true",
+        help="keep the (temp) output directory instead of deleting it",
+    )
     demo_p.set_defaults(func=_cmd_demo)
 
     return parser
