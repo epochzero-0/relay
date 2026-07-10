@@ -216,17 +216,40 @@ deleted) so you can inspect the raw run CSV and any failures JSON. The
 **Google adapter is the least proven and most worth smoking first** (see
 Known limitations below).
 
+The OpenAI adapter has passed this smoke against the live Batch API
+(2026-07-10, `gpt-4o-mini`, 2 items):
+
+```
+[run1_p1_chunk0] submitted job batch_6a508fac6d2c8190a65579212b1f4aac
+[run1_p1_chunk0] in_progress 0/2
+[run1_p1_chunk0] ended 2/2
+[run1_p1_chunk0] done: 2 ok, 0 parse failures, 0 item errors
+coverage         : 100.0%
+converged        : True
+smoke_01: ok (parsed)
+smoke_02: ok (parsed)
+SMOKE PASSED
+```
+
 ## Known limitations
 
 The three real-provider adapters (`relay/providers/openai.py`,
 `anthropic.py`, `google.py`) are unit-tested against fake SDK modules
 injected into `sys.modules`: request building, status normalization,
-result parsing, and error-taxonomy mapping are all covered offline, but
-none of the three has been exercised against a live API. The **Google
-adapter is the least proven** of the three: it uses a file-based
-keyed submit/fetch flow with no legacy reference implementation to check
-it against, unlike the OpenAI and Anthropic adapters. Solid starting
-point, not a validated production integration.
+result parsing, and error-taxonomy mapping are all covered offline. The
+**OpenAI adapter has additionally been validated end to end against the
+live Batch API** via `relay smoke` (2026-07-10: real batch submitted,
+polled to terminal, results fetched and parsed, 100% coverage -- see the
+transcript above). The Anthropic and Google adapters have not yet been
+smoked live; the **Google adapter is the least proven** of the three: it
+uses a file-based keyed submit/fetch flow with no legacy reference
+implementation to check it against, unlike the OpenAI and Anthropic
+adapters.
+
+Note the distinction: the live smoke validates adapter wiring on the
+happy path. The fault-tolerance claims (drops, errors, submit failures,
+crash recovery) are demonstrated against the mock provider by design --
+real providers cannot be made to fail deterministically on demand.
 
 ## Project layout
 
