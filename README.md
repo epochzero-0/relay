@@ -104,6 +104,7 @@ exponential backoff. Full design, state diagram, and guarantees: see
 | `relay status` | print tracked chunk state from a tracker file |
 | `relay cost` | offline token/cost estimate, no network calls |
 | `relay demo` | scripted two-act fault-tolerance narrative, no keys |
+| `relay smoke` | validate a real provider with a tiny live batch (spends real money) |
 
 <details>
 <summary>Full flag reference</summary>
@@ -160,6 +161,15 @@ Offline token/cost estimate for a batch job. No network calls.
 | `--output-dir` | none | output directory (default: a fresh temp dir, cleaned up unless `--keep`) |
 | `--keep` | off | keep the (temp) output directory instead of deleting it |
 
+### `relay smoke`
+
+| flag | default | meaning |
+| --- | --- | --- |
+| `--provider` | (required) | `openai` \| `anthropic` \| `google` (`mock` not accepted) |
+| `--model` | adapter default | model name override |
+| `--items` | `2` | number of throwaway items to submit (1-10) |
+| `--poll-interval` | `30.0` | seconds between polls (real batch APIs are slow) |
+
 </details>
 
 ## Plug in a real provider
@@ -185,6 +195,26 @@ extra and an API key.
 
 If the SDK is missing, the CLI exits 2 with a `pip install relay[<extra>]`
 hint. If the API key is missing, it exits 2 naming the env var it expected.
+
+### Validating a real provider
+
+`relay smoke --provider <name>` submits a tiny throwaway batch (2 items by
+default, capped at 10) through the real Orchestrator against a real
+provider, to prove submit/poll/fetch/custom_id round-trip actually works
+end to end. It is not a prompt-quality check: an item that comes back with
+text that fails to parse still counts as a PASS, because smoke validates
+the adapter, not the model's output format.
+
+```
+relay smoke --provider openai --model gpt-4o-mini
+relay smoke --provider anthropic --model claude-3-5-haiku
+relay smoke --provider google --model gemini-2.5-flash
+```
+
+Output goes to a fresh temp directory (printed at the start, never
+deleted) so you can inspect the raw run CSV and any failures JSON. The
+**Google adapter is the least proven and most worth smoking first** (see
+Known limitations below).
 
 ## Known limitations
 

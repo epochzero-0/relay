@@ -142,3 +142,60 @@ def test_unknown_provider_rejected_by_argparse(monkeypatch, input_csv, tmp_path)
     with pytest.raises(SystemExit) as excinfo:
         _run_cli(monkeypatch, _base_run_args(input_csv, tmp_path, "not-a-provider"))
     assert excinfo.value.code == 2
+
+
+# ---------------------------------------------------------------------------
+# `relay smoke` -- offline guard-rail tests only (no live calls, ever).
+# ---------------------------------------------------------------------------
+
+
+def test_smoke_anthropic_sdk_absent_exits_2(monkeypatch, capsys):
+    assert importlib.util.find_spec("anthropic") is None
+
+    exit_code = _run_cli(monkeypatch, ["smoke", "--provider", "anthropic"])
+    out = capsys.readouterr().out
+    assert exit_code == 2
+    assert "relay[anthropic]" in out
+
+
+def test_smoke_openai_missing_api_key_exits_2_naming_env_var(monkeypatch, capsys):
+    real_find_spec = importlib.util.find_spec
+
+    def _fake_find_spec(name, *args, **kwargs):
+        if name == "openai":
+            return object()  # any non-None sentinel counts as "found".
+        return real_find_spec(name, *args, **kwargs)
+
+    monkeypatch.setattr(importlib.util, "find_spec", _fake_find_spec)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    exit_code = _run_cli(monkeypatch, ["smoke", "--provider", "openai"])
+    out = capsys.readouterr().out
+    assert exit_code == 2
+    assert "OPENAI_API_KEY" in out
+
+
+def test_smoke_items_below_range_exits_2(monkeypatch, capsys):
+    exit_code = _run_cli(
+        monkeypatch, ["smoke", "--provider", "openai", "--items", "0"]
+    )
+    out = capsys.readouterr().out
+    assert exit_code == 2
+    assert "--items must be between 1 and 10" in out
+
+
+def test_smoke_items_above_range_exits_2(monkeypatch, capsys):
+    # The items cap must be enforced before any SDK/api-key check runs, so
+    # this passes regardless of whether openai's SDK/key are available.
+    exit_code = _run_cli(
+        monkeypatch, ["smoke", "--provider", "openai", "--items", "11"]
+    )
+    out = capsys.readouterr().out
+    assert exit_code == 2
+    assert "--items must be between 1 and 10" in out
+
+
+def test_smoke_mock_provider_rejected_by_argparse(monkeypatch):
+    with pytest.raises(SystemExit) as excinfo:
+        _run_cli(monkeypatch, ["smoke", "--provider", "mock"])
+    assert excinfo.value.code == 2

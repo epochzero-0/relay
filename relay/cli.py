@@ -15,13 +15,16 @@ from __future__ import annotations
 import argparse
 import csv
 import importlib.util
+import json
 import os
+import tempfile
 from pathlib import Path
 
+from relay.core.coverage import present_ids
 from relay.core.models import DEFAULT_TASK, Job, Record
 from relay.core.orchestrator import Orchestrator
 from relay.core.tracker import Tracker
-from relay.cost import estimate_cost_for_records, format_estimate
+from relay.cost import PRICES, estimate_cost_for_records, format_estimate
 from relay.demo import run_demo
 from relay.env import load_env
 from relay.providers.mock import MockProvider
@@ -73,6 +76,52 @@ def _resolve_api_key(provider_cls: type) -> str | None:
     return None
 
 
+def _build_real_provider(provider_cls: type, model: str | None):
+    """Build a real (non-mock) provider instance, or report a config error.
+
+    Returns (provider, None) on success, or (None, exit_code) after printing
+    the error message. Reproduces the SDK-availability check and the
+    API-key check exactly as they must appear to the user:
+      * SDK missing -> prints the ``pip install relay[<extra>]`` hint,
+        returns (None, 2).
+      * API key missing -> prints the message naming the env var (the
+        google variant mentions both GOOGLE_API_KEY and GEMINI_API_KEY),
+        returns (None, 2).
+      * else -> builds the provider with api_key=..., system=DEFAULT_TASK.system,
+        and model=... only when given, returns (provider, None).
+    """
+    if not _sdk_available(provider_cls.sdk_module):
+        print(
+            f"the {provider_cls.sdk_module!r} package is required for "
+            f"--provider {provider_cls.registry_name}; install it with: "
+            f"pip install relay[{provider_cls.install_extra}]"
+        )
+        return None, 2
+
+    api_key = _resolve_api_key(provider_cls)
+    if not api_key:
+        env_name = provider_cls.api_key_env
+        if provider_cls.registry_name == "google":
+            print(
+                f"missing API key: set {env_name} (or GEMINI_API_KEY) "
+                f"for --provider {provider_cls.registry_name}"
+            )
+        else:
+            print(
+                f"missing API key: set {env_name} for --provider "
+                f"{provider_cls.registry_name}"
+            )
+        return None, 2
+
+    provider_kwargs: dict = {
+        "api_key": api_key,
+        "system": DEFAULT_TASK.system,
+    }
+    if model is not None:
+        provider_kwargs["model"] = model
+    return provider_cls(**provider_kwargs), None
+
+
 def _cmd_run(args: argparse.Namespace) -> int:
     load_env()
 
@@ -101,36 +150,9 @@ def _cmd_run(args: argparse.Namespace) -> int:
             expire_rate=args.expire_rate,
         )
     else:
-        if not _sdk_available(provider_cls.sdk_module):
-            print(
-                f"the {provider_cls.sdk_module!r} package is required for "
-                f"--provider {args.provider}; install it with: "
-                f"pip install relay[{provider_cls.install_extra}]"
-            )
-            return 2
-
-        api_key = _resolve_api_key(provider_cls)
-        if not api_key:
-            env_name = provider_cls.api_key_env
-            if provider_cls.registry_name == "google":
-                print(
-                    f"missing API key: set {env_name} (or GEMINI_API_KEY) "
-                    f"for --provider {args.provider}"
-                )
-            else:
-                print(
-                    f"missing API key: set {env_name} for --provider "
-                    f"{args.provider}"
-                )
-            return 2
-
-        provider_kwargs: dict = {
-            "api_key": api_key,
-            "system": DEFAULT_TASK.system,
-        }
-        if args.model is not None:
-            provider_kwargs["model"] = args.model
-        provider = provider_cls(**provider_kwargs)
+        provider, exit_code = _build_real_provider(provider_cls, args.model)
+        if provider is None:
+            return exit_code
 
     job = Job(
         run_id=args.run_id,
@@ -199,6 +221,100 @@ def _cmd_cost(args: argparse.Namespace) -> int:
 def _cmd_demo(args: argparse.Namespace) -> int:
     output_dir = Path(args.output_dir) if args.output_dir else None
     return run_demo(seed=args.seed, output_dir=output_dir, keep=args.keep)
+
+
+def _cmd_smoke(args: argparse.Namespace) -> int:
+    """Submit a tiny throwaway batch to a real provider and verify transport.
+
+    Validates that submit/poll/fetch round-trip custom_ids correctly. Does
+    NOT require the model's text to parse -- that is a prompt-compliance
+    concern, not an adapter concern. See PLAN-live-smoke-command.md.
+    """
+    load_env()
+
+    if args.provider == "mock":
+        print("smoke exists to validate a real provider; --provider mock is not allowed")
+        return 2
+
+    if args.items < 1 or args.items > 10:
+        print("--items must be between 1 and 10")
+        return 2
+
+    records = [
+        Record(order_id=f"smoke_{i:02d}", text=f"smoke test item {i}")
+        for i in range(1, args.items + 1)
+    ]
+
+    if args.model is not None and args.model in PRICES:
+        estimate = estimate_cost_for_records(records, args.model, DEFAULT_TASK.max_tokens)
+        print(format_estimate(estimate))
+    else:
+        model_name = args.model if args.model is not None else "(adapter default)"
+        print(
+            f"cost estimate unavailable for model '{model_name}' "
+            "(not in the offline price table)"
+        )
+
+    try:
+        provider_cls = get_provider_class(args.provider)
+    except ValueError as exc:
+        print(str(exc))
+        return 2
+
+    provider, exit_code = _build_real_provider(provider_cls, args.model)
+    if provider is None:
+        return exit_code
+
+    output_dir = Path(tempfile.mkdtemp(prefix="relay_smoke_"))
+    print(f"smoke output dir: {output_dir}")
+
+    job = Job(
+        run_id=1,
+        records=tuple(records),
+        task=DEFAULT_TASK,
+        output_dir=output_dir,
+        tracker_path=output_dir / "tracker.json",
+    )
+    orchestrator = Orchestrator(
+        provider,
+        poll_interval=args.poll_interval,
+        max_passes=1,
+    )
+    orchestrator.run(job)
+
+    output_csv = output_dir / "run1.csv"
+    ok_ids = present_ids(output_csv)
+
+    parse_failure_ids: set[str] = set()
+    item_error_ids: dict[str, str] = {}
+    failures_path = output_dir / "run1_failures.json"
+    if failures_path.exists():
+        failures = json.loads(failures_path.read_text(encoding="utf-8"))
+        for failure in failures:
+            if failure.get("error") == "Parse failure":
+                parse_failure_ids.add(failure["order_id"])
+            else:
+                item_error_ids[failure["order_id"]] = failure.get("error", "")
+
+    all_ok = True
+    for record in records:
+        order_id = record.order_id
+        if order_id in ok_ids:
+            print(f"{order_id}: ok (parsed)")
+        elif order_id in parse_failure_ids:
+            print(f"{order_id}: ok (returned, unparsed)")
+        elif order_id in item_error_ids:
+            print(f"{order_id}: item error: {item_error_ids[order_id]}")
+            all_ok = False
+        else:
+            print(f"{order_id}: MISSING")
+            all_ok = False
+
+    if all_ok:
+        print("SMOKE PASSED")
+        return 0
+    print("SMOKE FAILED")
+    return 1
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -291,6 +407,36 @@ def _build_parser() -> argparse.ArgumentParser:
         help="keep the (temp) output directory instead of deleting it",
     )
     demo_p.set_defaults(func=_cmd_demo)
+
+    smoke_choices = [name for name in provider_names() if name != "mock"]
+    smoke_p = sub.add_parser(
+        "smoke",
+        help="validate a real provider end-to-end with a tiny live batch",
+        description=(
+            "Submits a tiny throwaway batch (default 2 items, capped at 10) "
+            "through the real Orchestrator against a real provider, to prove "
+            "submit/poll/fetch/custom_id round-trip actually works. Batch "
+            "APIs can take minutes to hours to complete, and this command "
+            "spends a small amount of real money."
+        ),
+    )
+    smoke_p.add_argument(
+        "--provider", required=True, choices=smoke_choices,
+        help="real provider to validate (mock is not accepted)",
+    )
+    smoke_p.add_argument(
+        "--model", default=None,
+        help="model name override (default: adapter's own default)",
+    )
+    smoke_p.add_argument(
+        "--items", type=int, default=2,
+        help="number of throwaway items to submit (1-10, default 2)",
+    )
+    smoke_p.add_argument(
+        "--poll-interval", type=float, default=30.0,
+        help="seconds between polls (default 30.0 -- real batch APIs are slow)",
+    )
+    smoke_p.set_defaults(func=_cmd_smoke)
 
     return parser
 
