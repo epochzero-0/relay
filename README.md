@@ -269,21 +269,24 @@ small output budgets from coming back as empty text. The Gemini Batch
 API also requires a paid-tier key: free-tier keys fail at submit with
 `400 FAILED_PRECONDITION`.
 
-## Known limitations
+## Validation methodology
 
-The three real-provider adapters (`relay/providers/openai.py`,
-`anthropic.py`, `google.py`) are unit-tested against fake SDK modules
-injected into `sys.modules`: request building, status normalization,
-result parsing, and error-taxonomy mapping are all covered offline.
-**All three have additionally been validated end to end against their
-live batch APIs** via `relay smoke` (2026-07-10: real batch submitted,
-polled to terminal, results fetched and parsed, 100% coverage -- see the
-transcripts above).
+Each claim is tested with the method that can actually exercise it:
 
-Note the distinction: the live smoke validates adapter wiring on the
-happy path. The fault-tolerance claims (drops, errors, submit failures,
-crash recovery) are demonstrated against the mock provider by design --
-real providers cannot be made to fail deterministically on demand.
+- **Adapter correctness, offline:** the three real-provider adapters
+  (`relay/providers/openai.py`, `anthropic.py`, `google.py`) are
+  unit-tested against fake SDK modules injected into `sys.modules` --
+  request building, status normalization, result parsing, and
+  error-taxonomy mapping, no network or keys required.
+- **Adapter wiring, live:** all three adapters are validated end to end
+  against their real batch APIs via `relay smoke` (2026-07-10: real
+  batch submitted, polled to terminal, results fetched and parsed, 100%
+  coverage -- see the transcripts above).
+- **Fault tolerance:** drops, item errors, submit failures, expiry, and
+  crash recovery are exercised against the mock provider, which can
+  inject failures deterministically and reproducibly -- something no
+  live API can do on demand. The live smokes cover the happy path; the
+  mock covers everything that can go wrong on it.
 
 ## Project layout
 
