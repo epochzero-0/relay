@@ -120,17 +120,24 @@ def test_submit_builds_keyed_jsonl_and_returns_name(fake_google):
     body = lines[0]["request"]
     assert body["contents"][0]["parts"][0]["text"] == "prompt 1"
     assert body["contents"][0]["role"] == "user"
-    assert body["generationConfig"]["maxOutputTokens"] == 24
-    assert body["generationConfig"]["temperature"] == 0.2
-    assert body["systemInstruction"]["parts"][0]["text"] == "be brief"
+    assert body["generation_config"]["max_output_tokens"] == 24
+    assert body["generation_config"]["temperature"] == 0.2
+    assert body["system_instruction"]["parts"][0]["text"] == "be brief"
+    # non-gemini-3 model -> no thinking knob (2.5 family rejects it)
+    assert "thinking_config" not in body["generation_config"]
 
 
 def test_submit_omits_system_and_temperature_when_unset(fake_google):
     mod = fake_google(job=None)
     GoogleBatchProvider().submit(_reqs(1))
     body = json.loads(mod._captured["payload"].splitlines()[0])["request"]
-    assert "systemInstruction" not in body
-    assert "temperature" not in body["generationConfig"]
+    assert "system_instruction" not in body
+    assert "temperature" not in body["generation_config"]
+    # default model is gemini-3.x -> thinking pinned to MINIMAL so thinking
+    # tokens don't eat the max_output_tokens budget (empty-text failure mode).
+    # Proto-JSON nesting: generation_config.thinking_config.thinking_level.
+    cfg = body["generation_config"]["thinking_config"]
+    assert cfg == {"thinking_level": "MINIMAL"}
 
 
 def test_submit_rejects_oversize_batch_locally(fake_google):

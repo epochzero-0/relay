@@ -27,7 +27,9 @@ from relay.core.models import BatchResult, JobStatus, ProviderLimits, Request
 from relay.providers.base import BatchTooLargeError, TransientSubmitError
 
 #: Default model. EDIT THIS to whatever Claude model you want to batch against.
-DEFAULT_MODEL = "claude-3-5-haiku-latest"
+#: Kept on a current-generation alias: retired/gated models fail at request
+#: time (the Gemini adapter learned this live -- see google.py's risk note).
+DEFAULT_MODEL = "claude-haiku-4-5"
 
 #: Anthropic accepts up to 100,000 requests (or 256 MB) per Message Batch.
 DEFAULT_MAX_ITEMS = 100_000

@@ -16,12 +16,29 @@ original ordering).
 So this adapter instead uses the **file-based** batch flow: it uploads a JSONL
 file where every line carries a ``"key"`` (= the Request.custom_id) alongside
 its ``"request"`` body, and reads results from the output file, where each line
-echoes that ``"key"``. That makes fetch crash-safe. The exact JSONL field
-casing (camelCase ``generationConfig`` / ``maxOutputTokens`` per the REST batch
-format) and the ``job.dest.file_name`` download path are the parts most likely
-to need a small tweak once tested against a real key. Parsing is written
+echoes that ``"key"``. That makes fetch crash-safe. JSONL field casing follows
+the batch-api docs' snake_case (``generation_config`` / ``max_output_tokens``)
+and the upload mime type is ``"jsonl"``, both per
+https://ai.google.dev/gemini-api/docs/batch-api. Parsing is written
 defensively (``.get`` chains, broad attribute fallbacks) to degrade to a clean
 per-item failure rather than crash the run.
+
+Live-smoke history (2026-07-10): submit/poll/fetch/key round-trip verified
+against the real API -- the job ran and keyed per-item results came back.
+Two failed attempts before the root cause was found: per-item code 5
+NOT_FOUND on every item was ultimately the MODEL, not the format --
+``gemini-2.5-flash`` is "no longer available to new users" (confirmed via a
+synchronous generate_content call returning 404 with that exact message),
+and the file-based batch flow defers model resolution to per-item
+processing, so a gated model fails per-item instead of at create. The
+JSONL casing/mime fixes made along the way (camelCase -> snake_case,
+``application/jsonl`` -> ``jsonl``) match the documented format and were
+kept. Third attempt (gemini-3.5-flash) round-tripped real text for one item;
+the other returned empty text because 3.x thinking tokens count against
+``max_output_tokens`` -- hence the ``thinking_config.thinking_level: MINIMAL``
+pin in ``_build_jsonl`` for gemini-3* models (proto-JSON nesting + enum
+casing, per the installed SDK's ``types.ThinkingConfig`` -- the docs' flat
+``thinking_level: minimal`` is SDK-only sugar the batch file parser rejects).
 
   submit()         write JSONL (key + request per line), upload via files, then
                    ``batches.create(model=, src=<uploaded file name>)``.
@@ -41,7 +58,10 @@ from relay.core.models import BatchResult, JobStatus, ProviderLimits, Request
 from relay.providers.base import BatchTooLargeError, TransientSubmitError
 
 #: Default model. EDIT THIS to whatever Gemini model you want to batch against.
-DEFAULT_MODEL = "gemini-2.5-flash"
+#: NOTE: "gemini-2.5-flash" 404s for API keys created after its new-user cutoff
+#: ("no longer available to new users"), which surfaces as a per-item
+#: NOT_FOUND (code 5) on every batch item. Prefer a current-generation model.
+DEFAULT_MODEL = "gemini-3.5-flash"
 
 #: Conservative default item ceiling; adjust to your quota. Gemini's documented
 #: batch limits are large but quota/token-bound, which relay cannot see.
@@ -148,7 +168,7 @@ class GoogleBatchProvider:
             try:
                 uploaded = client.files.upload(
                     file=str(tmp),
-                    config={"mime_type": "application/jsonl"},
+                    config={"mime_type": "jsonl"},
                 )
                 src = getattr(uploaded, "name", uploaded)
                 job = client.batches.create(model=self.model, src=src)
@@ -217,12 +237,24 @@ class GoogleBatchProvider:
                 "contents": [
                     {"role": "user", "parts": [{"text": req.prompt}]}
                 ],
-                "generationConfig": {"maxOutputTokens": req.max_tokens},
+                "generation_config": {"max_output_tokens": req.max_tokens},
             }
+            if self.model.startswith("gemini-3"):
+                # Gemini 3.x models think by default and thinking tokens count
+                # against max_output_tokens, so relay's small per-item budgets
+                # come back as empty text (MAX_TOKENS hit mid-thought). Pin
+                # minimal thinking; 3.x rejects the older thinking_budget knob.
+                # Raw batch JSONL is proto JSON: the field nests as
+                # generation_config.thinking_config.thinking_level with an
+                # ENUM value ("MINIMAL"), unlike the SDK's flat
+                # config={"thinking_level": "minimal"} sugar.
+                body["generation_config"]["thinking_config"] = {
+                    "thinking_level": "MINIMAL"
+                }
             if self.temperature is not None:
-                body["generationConfig"]["temperature"] = self.temperature
+                body["generation_config"]["temperature"] = self.temperature
             if self.system:
-                body["systemInstruction"] = {"parts": [{"text": self.system}]}
+                body["system_instruction"] = {"parts": [{"text": self.system}]}
             lines.append(json.dumps({"key": req.custom_id, "request": body}))
         return "\n".join(lines) + "\n"
 

@@ -207,14 +207,12 @@ the adapter, not the model's output format.
 
 ```
 relay smoke --provider openai --model gpt-4o-mini
-relay smoke --provider anthropic --model claude-3-5-haiku
-relay smoke --provider google --model gemini-2.5-flash
+relay smoke --provider anthropic --model claude-haiku-4-5
+relay smoke --provider google --model gemini-3.5-flash
 ```
 
 Output goes to a fresh temp directory (printed at the start, never
-deleted) so you can inspect the raw run CSV and any failures JSON. The
-**Google adapter is the least proven and most worth smoking first** (see
-Known limitations below).
+deleted) so you can inspect the raw run CSV and any failures JSON.
 
 The OpenAI adapter has passed this smoke against the live Batch API
 (2026-07-10, `gpt-4o-mini`, 2 items):
@@ -231,20 +229,44 @@ smoke_02: ok (parsed)
 SMOKE PASSED
 ```
 
+The Google adapter has passed the same smoke against the live Gemini
+Batch API (2026-07-10, `gemini-3.5-flash`, 2 items, file-based keyed
+flow):
+
+```
+[run1_p1_chunk0] submitted job batches/2feqkep8u7dx3cl3qojx284ksswdmk14s6av
+[run1_p1_chunk0] running 0/0
+[run1_p1_chunk0] ended 0/0
+[run1_p1_chunk0] done: 2 ok, 0 parse failures, 0 item errors
+coverage         : 100.0%
+converged        : True
+smoke_01: ok (parsed)
+smoke_02: ok (parsed)
+SMOKE PASSED
+```
+
+Two Gemini gotchas the smoke surfaced, now handled by the adapter: the
+default model must be a current-generation one (`gemini-2.5-flash` 404s
+per-item for API keys created after its new-user cutoff), and Gemini 3.x
+thinking tokens count against `max_output_tokens`, so the adapter pins
+`thinking_config.thinking_level: MINIMAL` for `gemini-3*` models to keep
+small output budgets from coming back as empty text. The Gemini Batch
+API also requires a paid-tier key: free-tier keys fail at submit with
+`400 FAILED_PRECONDITION`.
+
 ## Known limitations
 
 The three real-provider adapters (`relay/providers/openai.py`,
 `anthropic.py`, `google.py`) are unit-tested against fake SDK modules
 injected into `sys.modules`: request building, status normalization,
 result parsing, and error-taxonomy mapping are all covered offline. The
-**OpenAI adapter has additionally been validated end to end against the
-live Batch API** via `relay smoke` (2026-07-10: real batch submitted,
-polled to terminal, results fetched and parsed, 100% coverage -- see the
-transcript above). The Anthropic and Google adapters have not yet been
-smoked live; the **Google adapter is the least proven** of the three: it
-uses a file-based keyed submit/fetch flow with no legacy reference
-implementation to check it against, unlike the OpenAI and Anthropic
-adapters.
+**OpenAI and Google adapters have additionally been validated end to end
+against their live Batch APIs** via `relay smoke` (both 2026-07-10: real
+batch submitted, polled to terminal, results fetched and parsed, 100%
+coverage -- see the transcripts above). The **Anthropic adapter has not
+yet been smoked live**; its request/response shapes mirror a working
+legacy script, so its residual risk was always the lowest of the three,
+but live validation is one `relay smoke --provider anthropic` away.
 
 Note the distinction: the live smoke validates adapter wiring on the
 happy path. The fault-tolerance claims (drops, errors, submit failures,

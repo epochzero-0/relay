@@ -44,12 +44,17 @@ PRICES: dict[str, ModelPrice] = {
     "claude-opus-4-5": ModelPrice(input_per_mtok=7.50, output_per_mtok=37.50),
     "claude-sonnet-4-5": ModelPrice(input_per_mtok=1.50, output_per_mtok=7.50),
     "claude-3-5-haiku": ModelPrice(input_per_mtok=0.40, output_per_mtok=2.00),
+    "claude-haiku-4-5": ModelPrice(input_per_mtok=0.50, output_per_mtok=2.50),
     # OpenAI
     "gpt-4o": ModelPrice(input_per_mtok=1.25, output_per_mtok=5.00),
     "gpt-4o-mini": ModelPrice(input_per_mtok=0.075, output_per_mtok=0.30),
     # Google
     "gemini-2.5-pro": ModelPrice(input_per_mtok=0.625, output_per_mtok=5.00),
+    # NOTE: gemini-2.5-flash is gated off for new API keys ("no longer
+    # available to new users"); kept for keys that predate the cutoff.
     "gemini-2.5-flash": ModelPrice(input_per_mtok=0.15, output_per_mtok=0.30),
+    "gemini-2.5-flash-lite": ModelPrice(input_per_mtok=0.05, output_per_mtok=0.20),
+    "gemini-3.5-flash": ModelPrice(input_per_mtok=0.75, output_per_mtok=4.50),
 }
 
 
