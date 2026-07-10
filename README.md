@@ -181,8 +181,8 @@ extra and an API key.
 1. Install the matching extra: `pip install -e ".[openai]"` (or
    `.[anthropic]` / `.[google]`).
 2. Set the matching env var: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, or
-   `GEMINI_API_KEY` (the google adapter also accepts `GOOGLE_API_KEY`,
-   checked first). Copy `.env.example` to `.env` and fill in the key(s) --
+   `GOOGLE_API_KEY` (the google adapter also honors `GEMINI_API_KEY` as
+   a fallback). Copy `.env.example` to `.env` and fill in the key(s) --
    `relay run` auto-loads `.env` with a stdlib-only parser that never
    overrides an already-set environment variable.
 3. Run against the real provider:
@@ -314,7 +314,7 @@ data/
   make_dataset.py           # deterministic regenerator for records.csv
 
 tests/
-  test_*.py                 # 150 offline, keyless tests
+  test_*.py                 # 155 offline, keyless tests
   conftest.py                # shared fixtures (make_records, make_job, ...)
 ```
 
@@ -324,9 +324,11 @@ tests/
 pytest -q
 ```
 
-150 tests, all offline and keyless: no network access, no API keys, and
+155 tests, all offline and keyless: no network access, no API keys, and
 no real provider SDKs required (the real-provider tests run against fake
-SDK modules injected into `sys.modules`).
+SDK modules injected into `sys.modules`; SDK-availability checks are
+monkeypatched, so the suite passes whether or not real SDKs are
+installed).
 
 ## License / status
 
