@@ -229,6 +229,21 @@ smoke_02: ok (parsed)
 SMOKE PASSED
 ```
 
+The Anthropic adapter has passed the same smoke against the live Message
+Batches API (2026-07-10, `claude-haiku-4-5`, 2 items, first attempt):
+
+```
+[run1_p1_chunk0] submitted job msgbatch_01J1f985HV3NhngLgexXWFY2
+[run1_p1_chunk0] in_progress 0/2
+[run1_p1_chunk0] ended 2/2
+[run1_p1_chunk0] done: 2 ok, 0 parse failures, 0 item errors
+coverage         : 100.0%
+converged        : True
+smoke_01: ok (parsed)
+smoke_02: ok (parsed)
+SMOKE PASSED
+```
+
 The Google adapter has passed the same smoke against the live Gemini
 Batch API (2026-07-10, `gemini-3.5-flash`, 2 items, file-based keyed
 flow):
@@ -259,14 +274,11 @@ API also requires a paid-tier key: free-tier keys fail at submit with
 The three real-provider adapters (`relay/providers/openai.py`,
 `anthropic.py`, `google.py`) are unit-tested against fake SDK modules
 injected into `sys.modules`: request building, status normalization,
-result parsing, and error-taxonomy mapping are all covered offline. The
-**OpenAI and Google adapters have additionally been validated end to end
-against their live Batch APIs** via `relay smoke` (both 2026-07-10: real
-batch submitted, polled to terminal, results fetched and parsed, 100%
-coverage -- see the transcripts above). The **Anthropic adapter has not
-yet been smoked live**; its request/response shapes mirror a working
-legacy script, so its residual risk was always the lowest of the three,
-but live validation is one `relay smoke --provider anthropic` away.
+result parsing, and error-taxonomy mapping are all covered offline.
+**All three have additionally been validated end to end against their
+live batch APIs** via `relay smoke` (2026-07-10: real batch submitted,
+polled to terminal, results fetched and parsed, 100% coverage -- see the
+transcripts above).
 
 Note the distinction: the live smoke validates adapter wiring on the
 happy path. The fault-tolerance claims (drops, errors, submit failures,

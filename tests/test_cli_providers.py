@@ -2,9 +2,9 @@
 
 Driven entirely through `relay.cli.main` with patched sys.argv -- never a
 subprocess. These must pass regardless of which optional SDKs are actually
-installed in the test environment (anthropic and google are genuinely
-absent here; openai happens to be present), so the SDK-availability check is
-monkeypatched directly where determinism is required.
+installed in the test environment (real SDKs get installed locally for live
+smokes), so the SDK-availability check is always monkeypatched via
+find_spec rather than relying on what the environment happens to contain.
 """
 
 from __future__ import annotations
@@ -45,11 +45,21 @@ def _base_run_args(input_csv: Path, tmp_path: Path, provider: str) -> list[str]:
     ]
 
 
+def _hide_sdk(monkeypatch, module_name):
+    """Patch find_spec so ``module_name`` reports as not installed, whether
+    or not it really is (real SDKs get installed locally for live smokes)."""
+    real_find_spec = importlib.util.find_spec
+
+    def _fake_find_spec(name, *args, **kwargs):
+        if name == module_name:
+            return None
+        return real_find_spec(name, *args, **kwargs)
+
+    monkeypatch.setattr(importlib.util, "find_spec", _fake_find_spec)
+
+
 def test_anthropic_sdk_absent_exits_2(monkeypatch, input_csv, tmp_path):
-    # anthropic is genuinely not installed in this environment; assert that
-    # directly so the test documents its own precondition rather than only
-    # relying on the monkeypatch below.
-    assert importlib.util.find_spec("anthropic") is None
+    _hide_sdk(monkeypatch, "anthropic")
 
     exit_code = _run_cli(
         monkeypatch, _base_run_args(input_csv, tmp_path, "anthropic")
@@ -58,6 +68,8 @@ def test_anthropic_sdk_absent_exits_2(monkeypatch, input_csv, tmp_path):
 
 
 def test_anthropic_sdk_absent_message_mentions_extra(monkeypatch, input_csv, tmp_path, capsys):
+    _hide_sdk(monkeypatch, "anthropic")
+
     exit_code = _run_cli(
         monkeypatch, _base_run_args(input_csv, tmp_path, "anthropic")
     )
@@ -150,7 +162,7 @@ def test_unknown_provider_rejected_by_argparse(monkeypatch, input_csv, tmp_path)
 
 
 def test_smoke_anthropic_sdk_absent_exits_2(monkeypatch, capsys):
-    assert importlib.util.find_spec("anthropic") is None
+    _hide_sdk(monkeypatch, "anthropic")
 
     exit_code = _run_cli(monkeypatch, ["smoke", "--provider", "anthropic"])
     out = capsys.readouterr().out
