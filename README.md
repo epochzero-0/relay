@@ -214,8 +214,9 @@ relay smoke --provider google --model gemini-3.5-flash
 Output goes to a fresh temp directory (printed at the start, never
 deleted) so you can inspect the raw run CSV and any failures JSON.
 
-The OpenAI adapter has passed this smoke against the live Batch API
-(2026-07-10, `gpt-4o-mini`, 2 items):
+**All three adapters have passed this smoke against their live batch
+APIs** (2026-07-10: OpenAI `gpt-4o-mini`, Anthropic `claude-haiku-4-5`,
+Google `gemini-3.5-flash`). The OpenAI transcript:
 
 ```
 [run1_p1_chunk0] submitted job batch_6a508fac6d2c8190a65579212b1f4aac
@@ -229,45 +230,9 @@ smoke_02: ok (parsed)
 SMOKE PASSED
 ```
 
-The Anthropic adapter has passed the same smoke against the live Message
-Batches API (2026-07-10, `claude-haiku-4-5`, 2 items, first attempt):
-
-```
-[run1_p1_chunk0] submitted job msgbatch_01J1f985HV3NhngLgexXWFY2
-[run1_p1_chunk0] in_progress 0/2
-[run1_p1_chunk0] ended 2/2
-[run1_p1_chunk0] done: 2 ok, 0 parse failures, 0 item errors
-coverage         : 100.0%
-converged        : True
-smoke_01: ok (parsed)
-smoke_02: ok (parsed)
-SMOKE PASSED
-```
-
-The Google adapter has passed the same smoke against the live Gemini
-Batch API (2026-07-10, `gemini-3.5-flash`, 2 items, file-based keyed
-flow):
-
-```
-[run1_p1_chunk0] submitted job batches/2feqkep8u7dx3cl3qojx284ksswdmk14s6av
-[run1_p1_chunk0] running 0/0
-[run1_p1_chunk0] ended 0/0
-[run1_p1_chunk0] done: 2 ok, 0 parse failures, 0 item errors
-coverage         : 100.0%
-converged        : True
-smoke_01: ok (parsed)
-smoke_02: ok (parsed)
-SMOKE PASSED
-```
-
-Two Gemini gotchas the smoke surfaced, now handled by the adapter: the
-default model must be a current-generation one (`gemini-2.5-flash` 404s
-per-item for API keys created after its new-user cutoff), and Gemini 3.x
-thinking tokens count against `max_output_tokens`, so the adapter pins
-`thinking_config.thinking_level: MINIMAL` for `gemini-3*` models to keep
-small output budgets from coming back as empty text. The Gemini Batch
-API also requires a paid-tier key: free-tier keys fail at submit with
-`400 FAILED_PRECONDITION`.
+All three transcripts, plus the provider gotchas the smokes surfaced
+(Gemini model gating, thinking-token budgets, batch key-tier
+requirements), are recorded in [docs/VALIDATION.md](docs/VALIDATION.md).
 
 ## Validation methodology
 
@@ -281,7 +246,7 @@ Each claim is tested with the method that can actually exercise it:
 - **Adapter wiring, live:** all three adapters are validated end to end
   against their real batch APIs via `relay smoke` (2026-07-10: real
   batch submitted, polled to terminal, results fetched and parsed, 100%
-  coverage -- see the transcripts above).
+  coverage -- transcripts in [docs/VALIDATION.md](docs/VALIDATION.md)).
 - **Fault tolerance:** drops, item errors, submit failures, expiry, and
   crash recovery are exercised against the mock provider, which can
   inject failures deterministically and reproducibly -- something no
